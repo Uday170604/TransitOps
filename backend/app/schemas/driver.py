@@ -1,0 +1,30 @@
+from pydantic import BaseModel, Field
+from typing import Optional, Literal
+from datetime import date
+
+class DriverBase(BaseModel):
+    name: str
+    license_number: str
+    license_category: str
+    license_expiry_date: date
+    contact_number: str
+    safety_score: float = Field(default=100.0, ge=0, le=100)
+    status: Literal["Available", "On Trip", "Off Duty", "Suspended"] = "Available"
+
+class DriverCreate(DriverBase):
+    pass
+
+class DriverUpdate(BaseModel):
+    name: Optional[str] = None
+    license_number: Optional[str] = None
+    license_category: Optional[str] = None
+    license_expiry_date: Optional[date] = None
+    contact_number: Optional[str] = None
+    safety_score: Optional[float] = Field(None, ge=0, le=100)
+    status: Optional[Literal["Available", "On Trip", "Off Duty", "Suspended"]] = None
+
+class DriverResponse(DriverBase):
+    id: int
+
+    class Config:
+        from_attributes = True

@@ -1,8 +1,15 @@
 from app.database import SessionLocal, Base, engine
 from app.models.user import User
+from app.models.vehicle import Vehicle
+from app.models.driver import Driver
+from app.models.trip import Trip
+from app.models.maintenance import MaintenanceLog
 from app.core.security import get_password_hash
 
 def seed_db():
+    print("Dropping existing database tables...")
+    Base.metadata.drop_all(bind=engine)
+    
     print("Creating database tables...")
     Base.metadata.create_all(bind=engine)
     

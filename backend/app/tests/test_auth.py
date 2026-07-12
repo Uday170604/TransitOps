@@ -81,6 +81,13 @@ def test_get_me_unauthenticated():
     assert json_data["message"] == "Not authenticated"
 
 def test_register_role_hierarchy():
+    import uuid
+    rand = uuid.uuid4().hex[:6]
+    safety_email = f"safety_{rand}@transitops.dev"
+    driver_email = f"driver_{rand}@transitops.dev"
+    fleet_email = f"fleet_{rand}@transitops.dev"
+    driver2_email = f"driver2_{rand}@transitops.dev"
+
     fleet_login = client.post(
         "/auth/login",
         json={"email": "fleet@transitops.dev", "password": "demo1234"}
@@ -91,7 +98,7 @@ def test_register_role_hierarchy():
         "/auth/register",
         headers={"Authorization": f"Bearer {fleet_token}"},
         json={
-            "email": "new_safety@transitops.dev",
+            "email": safety_email,
             "name": "New Safety Officer",
             "role": "safety_officer",
             "password": "password123"
@@ -103,7 +110,7 @@ def test_register_role_hierarchy():
 
     safety_login = client.post(
         "/auth/login",
-        json={"email": "new_safety@transitops.dev", "password": "password123"}
+        json={"email": safety_email, "password": "password123"}
     )
     safety_token = safety_login.json()["data"]["token"]
 
@@ -111,7 +118,7 @@ def test_register_role_hierarchy():
         "/auth/register",
         headers={"Authorization": f"Bearer {safety_token}"},
         json={
-            "email": "new_driver@transitops.dev",
+            "email": driver_email,
             "name": "New Driver",
             "role": "driver",
             "password": "password123"
@@ -125,7 +132,7 @@ def test_register_role_hierarchy():
         "/auth/register",
         headers={"Authorization": f"Bearer {safety_token}"},
         json={
-            "email": "another_fleet@transitops.dev",
+            "email": fleet_email,
             "name": "Another Fleet",
             "role": "fleet_manager",
             "password": "password123"
@@ -137,7 +144,7 @@ def test_register_role_hierarchy():
 
     driver_login = client.post(
         "/auth/login",
-        json={"email": "new_driver@transitops.dev", "password": "password123"}
+        json={"email": driver_email, "password": "password123"}
     )
     driver_token = driver_login.json()["data"]["token"]
 
@@ -145,7 +152,7 @@ def test_register_role_hierarchy():
         "/auth/register",
         headers={"Authorization": f"Bearer {driver_token}"},
         json={
-            "email": "driver2@transitops.dev",
+            "email": driver2_email,
             "name": "Driver Two",
             "role": "driver",
             "password": "password123"
@@ -155,6 +162,10 @@ def test_register_role_hierarchy():
     assert response.json()["success"] is False
 
 def test_register_invalid_role_value():
+    import uuid
+    rand = uuid.uuid4().hex[:6]
+    admin_email = f"admin_{rand}@transitops.dev"
+
     fleet_login = client.post(
         "/auth/login",
         json={"email": "fleet@transitops.dev", "password": "demo1234"}
@@ -165,7 +176,7 @@ def test_register_invalid_role_value():
         "/auth/register",
         headers={"Authorization": f"Bearer {fleet_token}"},
         json={
-            "email": "admin@transitops.dev",
+            "email": admin_email,
             "name": "Admin User",
             "role": "admin",
             "password": "password123"
