@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { CheckCircle2, XCircle, Play, CheckCircle, Search, AlertTriangle, ArrowRight } from 'lucide-react'
 import { getTrips, getVehicles, getDrivers, createTrip, updateTripStatus } from '../lib/api.js'
+import { useSettings } from '../context/SettingsContext.jsx'
 
 export default function TripsPage() {
+  const { formatDistance, distanceUnitLabel } = useSettings()
   const [trips, setTrips] = useState([])
   const [vehicles, setVehicles] = useState([])
   const [drivers, setDrivers] = useState([])
@@ -93,13 +95,14 @@ export default function TripsPage() {
     setIsSubmitting(true)
 
     try {
+      const finalDistance = distanceUnitLabel === 'mi' ? Math.round(parseFloat(plannedDistance) / 0.621371) : parseFloat(plannedDistance)
       await createTrip({
         source: source.trim(),
         destination: destination.trim(),
         vehicle_id: parseInt(selectedVehicleId),
         driver_id: parseInt(selectedDriverId),
         cargo_weight: parseFloat(cargoWeight),
-        planned_distance: parseFloat(plannedDistance),
+        planned_distance: finalDistance,
         status: 'Draft' // Default status is Draft
       })
       
@@ -155,15 +158,17 @@ export default function TripsPage() {
     setIsCompletingSubmit(true)
 
     const odoVal = parseFloat(finalOdometer)
-    const currentOdo = completingTrip.vehicle?.odometer || 0
+    const dbCurrentOdo = completingTrip.vehicle?.odometer || 0
+    const currentOdo = distanceUnitLabel === 'mi' ? Math.round(dbCurrentOdo * 0.621371) : dbCurrentOdo
 
     if (isNaN(odoVal) || odoVal < currentOdo) {
       setIsCompletingSubmit(false)
-      return setCompleteError(`Final odometer must be at least ${currentOdo} km.`)
+      return setCompleteError(`Final odometer must be at least ${currentOdo} ${distanceUnitLabel}.`)
     }
 
     try {
-      await updateTripStatus(completingTrip.id, 'Completed', odoVal)
+      const dbOdoVal = distanceUnitLabel === 'mi' ? Math.round(odoVal / 0.621371) : odoVal
+      await updateTripStatus(completingTrip.id, 'Completed', dbOdoVal)
       setCompletingTrip(null)
       setFinalOdometer('')
       loadData()
@@ -339,7 +344,7 @@ export default function TripsPage() {
               </div>
               <div>
                 <label htmlFor="distance" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                  Planned Distance (KM)
+                  Planned Distance ({distanceUnitLabel === 'mi' ? 'Miles' : 'KM'})
                 </label>
                 <input
                   id="distance"
@@ -481,7 +486,7 @@ export default function TripsPage() {
                   {/* Details and Badge Row */}
                   <div className="flex items-center justify-between text-[11px] text-ink-muted border-t border-border/30 pt-2">
                     <div className="flex items-center gap-4">
-                      <span>{t.planned_distance} km</span>
+                      <span>{formatDistance(t.planned_distance)}</span>
                       <span>{t.cargo_weight} kg</span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -534,19 +539,19 @@ export default function TripsPage() {
                   Trip: <strong className="text-ink">{completingTrip.source} → {completingTrip.destination}</strong>
                 </p>
                 <p className="text-xs text-ink-muted mb-4">
-                  Starting Odometer: <strong className="text-ink font-mono">{completingTrip.vehicle?.odometer || 0} km</strong>
+                  Starting Odometer: <strong className="text-ink font-mono">{formatDistance(completingTrip.vehicle?.odometer || 0)}</strong>
                 </p>
               </div>
 
               <div>
                 <label htmlFor="finalOdo" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                  Final Odometer reading (KM)
+                  Final Odometer reading ({distanceUnitLabel})
                 </label>
                 <input
                   id="finalOdo"
                   type="number"
                   required
-                  min={completingTrip.vehicle?.odometer || 0}
+                  min={distanceUnitLabel === 'mi' ? Math.round((completingTrip.vehicle?.odometer || 0) * 0.621371) : (completingTrip.vehicle?.odometer || 0)}
                   value={finalOdometer}
                   onChange={(e) => setFinalOdometer(e.target.value)}
                   className="w-full rounded-stamp border border-border bg-paper px-3 py-1.5 text-xs text-ink outline-none focus:border-accent font-mono"

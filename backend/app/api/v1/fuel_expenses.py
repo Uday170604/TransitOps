@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.deps import get_db, get_current_user
-from app.core.permissions import RoleChecker
+from app.core.permissions import PermissionChecker
 from app.models.fuel_log import FuelLog
 from app.models.expense import Expense
 from app.models.vehicle import Vehicle
@@ -13,8 +13,8 @@ from typing import List, Optional
 
 router = APIRouter()
 
-require_manager_or_driver = Depends(RoleChecker(["fleet_manager", "driver"]))
-require_auth = Depends(get_current_user)
+require_manager_or_driver = Depends(PermissionChecker("fuel", "write"))
+require_auth = Depends(PermissionChecker("fuel", "read"))
 
 @router.post("/fuel", response_model=ApiResponse[FuelLogResponse], status_code=status.HTTP_201_CREATED)
 def create_fuel_log(

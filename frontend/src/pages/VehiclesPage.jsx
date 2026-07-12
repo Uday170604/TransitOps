@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, X, Edit, Trash2, FileText, Search, ArrowUpDown, ArrowUp, ArrowDown, Upload } from 'lucide-react'
 import StatusBadge from '../components/layout/StatusBadge.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useSettings } from '../context/SettingsContext.jsx'
 import {
   getVehicles,
   createVehicle,
@@ -15,6 +16,7 @@ import {
 export default function VehiclesPage() {
   const { user } = useAuth()
   const isManager = user?.role === 'fleet_manager'
+  const { formatDistance, formatCurrency, distanceUnitLabel, currencySymbol } = useSettings()
 
   const [vehicles, setVehicles] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -91,8 +93,16 @@ export default function VehiclesPage() {
     setModel(v.model)
     setType(v.type)
     setMaxLoad(v.max_load_capacity.toString())
-    setOdometer(v.odometer.toString())
-    setAcqCost(v.acquisition_cost.toString())
+    
+    const odoVal = distanceUnitLabel === 'mi' ? Math.round(v.odometer * 0.621371) : v.odometer
+    setOdometer(odoVal.toString())
+    
+    let costVal = v.acquisition_cost
+    if (currencySymbol === '$') costVal = Math.round(v.acquisition_cost / 80)
+    else if (currencySymbol === '€') costVal = Math.round(v.acquisition_cost / 90)
+    else if (currencySymbol === '£') costVal = Math.round(v.acquisition_cost / 100)
+    setAcqCost(costVal.toString())
+    
     setStatus(v.status)
     setRegion(v.region || '')
     setFormError('')
@@ -132,13 +142,20 @@ export default function VehiclesPage() {
     }
 
     try {
+      const finalOdometer = distanceUnitLabel === 'mi' ? Math.round(parseFloat(odometer) / 0.621371) : parseFloat(odometer)
+      
+      let finalAcqCost = parseFloat(acqCost)
+      if (currencySymbol === '$') finalAcqCost = finalAcqCost * 80
+      else if (currencySymbol === '€') finalAcqCost = finalAcqCost * 90
+      else if (currencySymbol === '£') finalAcqCost = finalAcqCost * 100
+
       const payload = {
         registration_number: regNum.trim(),
         model: model.trim(),
         type,
         max_load_capacity: parseFloat(maxLoad),
-        odometer: parseFloat(odometer),
-        acquisition_cost: parseFloat(acqCost),
+        odometer: finalOdometer,
+        acquisition_cost: finalAcqCost,
         status,
         region: region.trim() || null,
       }
@@ -367,10 +384,10 @@ export default function VehiclesPage() {
                   Region {renderSortIcon('region')}
                 </th>
                 <th className="px-4 py-3 font-medium cursor-pointer hover:text-ink" onClick={() => toggleSort('odometer')}>
-                  Odometer {renderSortIcon('odometer')}
+                  Odometer ({distanceUnitLabel}) {renderSortIcon('odometer')}
                 </th>
                 <th className="px-4 py-3 font-medium cursor-pointer hover:text-ink" onClick={() => toggleSort('acquisition_cost')}>
-                  Acq Cost {renderSortIcon('acquisition_cost')}
+                  Acq Cost ({currencySymbol}) {renderSortIcon('acquisition_cost')}
                 </th>
                 <th className="px-4 py-3 font-medium cursor-pointer hover:text-ink" onClick={() => toggleSort('status')}>
                   Status {renderSortIcon('status')}
@@ -394,10 +411,10 @@ export default function VehiclesPage() {
                     <td className="px-4 py-3 text-ink-muted">{v.max_load_capacity} kg</td>
                     <td className="px-4 py-3 text-ink-muted">{v.region || '—'}</td>
                     <td className="px-4 py-3 font-mono text-xs text-ink-muted">
-                      {v.odometer.toLocaleString()} km
+                      {formatDistance(v.odometer)}
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-ink-muted">
-                      ₹{v.acquisition_cost.toLocaleString()}
+                      {formatCurrency(v.acquisition_cost)}
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={v.status} />
@@ -562,7 +579,7 @@ export default function VehiclesPage() {
                 </div>
                 <div>
                   <label htmlFor="odometer" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                    Odometer (km)
+                    Odometer ({distanceUnitLabel === 'mi' ? 'Miles' : 'km'})
                   </label>
                   <input
                     id="odometer"
@@ -577,7 +594,7 @@ export default function VehiclesPage() {
                 </div>
                 <div>
                   <label htmlFor="acqCost" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                    Cost (₹)
+                    Cost ({currencySymbol})
                   </label>
                   <input
                     id="acqCost"

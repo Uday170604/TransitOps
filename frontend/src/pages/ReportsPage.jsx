@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Download, FileText, BarChart3, TrendingUp, DollarSign, Activity } from 'lucide-react'
 import { getReports } from '../lib/api.js'
+import { useSettings } from '../context/SettingsContext.jsx'
 
 export default function ReportsPage() {
+  const { formatCurrency, distanceUnitLabel } = useSettings()
   const [reportData, setReportData] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
@@ -74,10 +76,12 @@ export default function ReportsPage() {
   const vehicles = reportData?.vehicles || []
   
   // 1. Fuel efficiency
-  const validEfficiencies = vehicles.map(v => v.fuel_efficiency).filter(fe => fe > 0)
+  const validEfficiencies = reportData?.vehicles ? reportData.vehicles.map(v => v.fuel_efficiency).filter(fe => fe > 0) : []
   const fuelEfficiency = validEfficiencies.length > 0
-    ? `${(validEfficiencies.reduce((sum, fe) => sum + fe, 0) / validEfficiencies.length).toFixed(1)} km/l`
-    : '8.4 km/l' // Mockup value
+    ? (distanceUnitLabel === 'mi' 
+        ? `${(validEfficiencies.reduce((sum, fe) => sum + fe, 0) / validEfficiencies.length * 0.621371).toFixed(1)} mi/l`
+        : `${(validEfficiencies.reduce((sum, fe) => sum + fe, 0) / validEfficiencies.length).toFixed(1)} km/l`)
+    : (distanceUnitLabel === 'mi' ? '5.2 mi/l' : '8.4 km/l')
 
   // 2. Fleet Utilization
   const fleetUtilization = reportData?.fleet_utilization_pct 
@@ -85,12 +89,10 @@ export default function ReportsPage() {
     : '81%' // Mockup value
 
   // 3. Operational Cost
-  const totalCost = reportData?.total_operational_cost
-    ? reportData.total_operational_cost.toLocaleString()
-    : '34,070' // Mockup value
+  const totalCost = formatCurrency(reportData?.total_operational_cost || 34070)
 
   // 4. Vehicle ROI
-  const validROIs = vehicles.map(v => v.roi).filter(roi => !isNaN(roi))
+  const validROIs = reportData?.vehicles ? reportData.vehicles.map(v => v.roi).filter(roi => !isNaN(roi)) : []
   const avgROI = validROIs.length > 0
     ? `${(validROIs.reduce((sum, r) => sum + r, 0) / validROIs.length * 100).toFixed(1)}%`
     : '14.2%' // Mockup value
@@ -118,16 +120,24 @@ export default function ReportsPage() {
     }
   })
 
-  // Monthly revenue mock data for bar chart matching Image 3
-  const monthlyRevenues = [
-    { month: 'Jan', amount: 15000, height: '40%' },
-    { month: 'Feb', amount: 19000, height: '55%' },
-    { month: 'Mar', amount: 17500, height: '50%' },
-    { month: 'Apr', amount: 24000, height: '70%' },
-    { month: 'May', amount: 22000, height: '65%' },
-    { month: 'Jun', amount: 28000, height: '82%' },
-    { month: 'Jul', amount: 26000, height: '78%' }
+  // Monthly revenue data from completed trips in DB
+  const rawMonthlyRevenues = reportData?.monthly_revenues || [
+    { month: 'Jan', amount: 15000 },
+    { month: 'Feb', amount: 19000 },
+    { month: 'Mar', amount: 17500 },
+    { month: 'Apr', amount: 24000 },
+    { month: 'May', amount: 22000 },
+    { month: 'Jun', amount: 28000 },
+    { month: 'Jul', amount: 26000 }
   ]
+  
+  const monthsShown = rawMonthlyRevenues.slice(0, 7)
+  const maxRevenue = Math.max(...monthsShown.map(r => r.amount), 1)
+  const monthlyRevenues = monthsShown.map(r => ({
+    month: r.month,
+    amount: r.amount,
+    height: `${(r.amount / maxRevenue) * 80 + 15}%`
+  }))
 
   return (
     <div className="space-y-6">
@@ -223,7 +233,7 @@ export default function ReportsPage() {
                 >
                   {/* Tooltip */}
                   <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-ink text-white text-[9px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity font-mono font-semibold z-20 shadow-md">
-                    ₹{rev.amount.toLocaleString()}
+                    {formatCurrency(rev.amount)}
                   </div>
                 </div>
                 {/* X Axis Label */}
@@ -246,7 +256,7 @@ export default function ReportsPage() {
               <div key={veh.model} className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-semibold text-ink">{veh.model}</span>
-                  <span className="font-mono text-ink-muted">₹{veh.cost.toLocaleString()}</span>
+                  <span className="font-mono text-ink-muted">{formatCurrency(veh.cost)}</span>
                 </div>
                 
                 {/* Progress bar container */}

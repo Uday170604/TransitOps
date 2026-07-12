@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.core.deps import get_db, get_current_user
-from app.core.permissions import RoleChecker
+from app.core.permissions import PermissionChecker
 from app.models.vehicle import Vehicle
 from app.models.fuel_log import FuelLog
 from app.models.maintenance import MaintenanceLog
@@ -23,7 +23,7 @@ import csv
 
 router = APIRouter()
 
-require_manager_or_analyst = Depends(RoleChecker(["fleet_manager", "financial_analyst"]))
+require_manager_or_analyst = Depends(PermissionChecker("analytics", "read"))
 
 def calculate_vehicle_metrics(db: Session, vehicle: Vehicle) -> VehicleReportDetail:
     trips_distance = db.query(Trip).filter(
@@ -81,10 +81,30 @@ def get_reports(
             
     fleet_utilization = (active_vehicles / total_vehicles * 100.0) if total_vehicles > 0 else 0.0
     
+    # Calculate monthly revenue from completed trips in DB
+    completed_trips = db.query(Trip).filter(Trip.status == "Completed").all()
+    month_names = {
+        1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+        7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"
+    }
+    monthly_revs_dict = {name: 0.0 for name in month_names.values()}
+    
+    for trip in completed_trips:
+        if trip.created_at:
+            m_name = month_names.get(trip.created_at.month)
+            if m_name:
+                monthly_revs_dict[m_name] += trip.revenue
+                
+    monthly_revenues_list = [
+        {"month": m, "amount": round(monthly_revs_dict[m], 2)}
+        for m in ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    ]
+    
     data = FleetReportsSummary(
         vehicles=vehicle_details,
         fleet_utilization_pct=round(fleet_utilization, 2),
-        total_operational_cost=round(total_op_cost, 2)
+        total_operational_cost=round(total_op_cost, 2),
+        monthly_revenues=monthly_revenues_list
     )
     
     return ApiResponse(

@@ -2,7 +2,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.deps import get_db, get_current_user
-from app.core.permissions import RoleChecker
+from app.core.permissions import PermissionChecker
 from app.models.driver import Driver
 from app.models.user import User
 from app.schemas.driver import DriverCreate, DriverUpdate, DriverResponse
@@ -10,8 +10,8 @@ from app.schemas.user import ApiResponse
 
 router = APIRouter()
 
-require_manager_or_safety = Depends(RoleChecker(["fleet_manager", "safety_officer"]))
-require_auth = Depends(get_current_user)
+require_manager_or_safety = Depends(PermissionChecker("driver", "write"))
+require_auth = Depends(PermissionChecker("driver", "read"))
 
 @router.post("/", response_model=ApiResponse[DriverResponse], status_code=status.HTTP_201_CREATED)
 def create_driver(

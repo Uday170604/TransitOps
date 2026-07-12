@@ -1,32 +1,41 @@
 import { useState, useEffect } from 'react'
 import { ShieldCheck } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useSettings } from '../context/SettingsContext.jsx'
 
 export default function SettingsPage() {
   const { user } = useAuth()
-  const [depotName, setDepotName] = useState('Gandhinagar Depot GJ4')
-  const [currency, setCurrency] = useState('INR (Rs)')
-  const [distanceUnit, setDistanceUnit] = useState('Kilometers')
+  const { settings, updateSettings } = useSettings()
+  
+  const [depotName, setDepotName] = useState(settings.depot_name)
+  const [currency, setCurrency] = useState(settings.currency)
+  const [distanceUnit, setDistanceUnit] = useState(settings.distance_unit)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [successMsg, setSuccessMsg] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
 
-  // Load settings on mount (with localStorage fallback)
-  useEffect(() => {
-    const savedDepot = localStorage.getItem('transitops_depot_name')
-    const savedCurrency = localStorage.getItem('transitops_currency')
-    const savedUnit = localStorage.getItem('transitops_distance_unit')
-    
-    if (savedDepot) setDepotName(savedDepot)
-    if (savedCurrency) setCurrency(savedCurrency)
-    if (savedUnit) setDistanceUnit(savedUnit)
+  // RBAC permissions state
+  const [rbacList, setRbacList] = useState([])
+  const [isSubmittingRbac, setIsSubmittingRbac] = useState(false)
+  const [rbacSuccessMsg, setRbacSuccessMsg] = useState('')
+  const [rbacErrorMsg, setRbacErrorMsg] = useState('')
 
-    // Also fetch from API in background if available
-    async function fetchSettings() {
+  // Sync settings when they load
+  useEffect(() => {
+    if (settings) {
+      setDepotName(settings.depot_name)
+      setCurrency(settings.currency)
+      setDistanceUnit(settings.distance_unit)
+    }
+  }, [settings])
+
+  // Load RBAC permissions
+  useEffect(() => {
+    async function fetchRbac() {
       try {
         const token = localStorage.getItem('transitops_token')
         const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-        const response = await fetch(`${baseUrl}/api/v1/settings/`, {
+        const response = await fetch(`${baseUrl}/api/v1/settings/rbac`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'ngrok-skip-browser-warning': 'true'
@@ -35,20 +44,14 @@ export default function SettingsPage() {
         if (response.ok) {
           const res = await response.json()
           if (res.success && res.data) {
-            setDepotName(res.data.depot_name)
-            setCurrency(res.data.currency)
-            setDistanceUnit(res.data.distance_unit)
-            // Sync local storage
-            localStorage.setItem('transitops_depot_name', res.data.depot_name)
-            localStorage.setItem('transitops_currency', res.data.currency)
-            localStorage.setItem('transitops_distance_unit', res.data.distance_unit)
+            setRbacList(res.data)
           }
         }
       } catch (err) {
-        console.warn('Backend settings endpoint not available, using local storage.')
+        console.error('Failed to fetch RBAC settings from database.', err)
       }
     }
-    fetchSettings()
+    fetchRbac()
   }, [])
 
   async function handleSave(e) {
@@ -57,49 +60,81 @@ export default function SettingsPage() {
     setSuccessMsg('')
     setErrorMsg('')
 
-    // Save to local storage immediately
-    localStorage.setItem('transitops_depot_name', depotName)
-    localStorage.setItem('transitops_currency', currency)
-    localStorage.setItem('transitops_distance_unit', distanceUnit)
+    const success = await updateSettings({
+      depot_name: depotName,
+      currency: currency,
+      distance_unit: distanceUnit
+    })
 
-    // Save to backend API
+    if (success) {
+      setSuccessMsg('Settings updated successfully!')
+    } else {
+      setErrorMsg('Failed to update settings on server.')
+    }
+    setIsSubmitting(false)
+  }
+
+  async function handleSaveRbac() {
+    setIsSubmittingRbac(true)
+    setRbacSuccessMsg('')
+    setRbacErrorMsg('')
+
     try {
       const token = localStorage.getItem('transitops_token')
       const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-      const response = await fetch(`${baseUrl}/api/v1/settings/`, {
+      const response = await fetch(`${baseUrl}/api/v1/settings/rbac`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'ngrok-skip-browser-warning': 'true'
+          'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          depot_name: depotName,
-          currency: currency,
-          distance_unit: distanceUnit
-        })
+        body: JSON.stringify(rbacList)
       })
 
-      if (!response.ok) {
-        throw new Error('Failed to update settings on server.')
+      if (response.ok) {
+        const res = await response.json()
+        if (res.success && res.data) {
+          setRbacList(res.data)
+          setRbacSuccessMsg('RBAC Permissions updated successfully!')
+        } else {
+          setRbacErrorMsg('Failed to update RBAC permissions.')
+        }
+      } else {
+        const errorData = await response.json()
+        setRbacErrorMsg(errorData.detail || 'Failed to update RBAC permissions.')
       }
-
-      setSuccessMsg('Settings updated successfully!')
     } catch (err) {
-      console.warn(err)
-      // Since database might not be local or accessible, success is local
-      setSuccessMsg('Settings saved locally (Server update pending).')
+      setRbacErrorMsg('Network error while updating RBAC permissions.')
     } finally {
-      setIsSubmitting(false)
+      setIsSubmittingRbac(false)
     }
   }
 
-  // RBAC permissions table data
-  const rbacData = [
-    { role: 'Fleet Manager', fleet: '✓', driver: '✓', trips: '--', fuel: '--', analytics: '✓' },
-    { role: 'Dispatcher', fleet: 'view', driver: '--', trips: '✓', fuel: '--', analytics: '--' },
-    { role: 'Safety Officer', fleet: '--', driver: '✓', trips: 'view', fuel: '--', analytics: '--' },
-    { role: 'Financial Analyst', fleet: 'view', driver: '--', trips: '--', fuel: '✓', analytics: '✓' },
+  const handlePermissionChange = (roleId, field, value) => {
+    setRbacList(prev => prev.map(role => {
+      if (role.id === roleId) {
+        return { ...role, [field]: value }
+      }
+      return role
+    }))
+  }
+
+  const getRoleFriendlyName = (name) => {
+    const mapping = {
+      "fleet_manager": "Fleet Manager",
+      "driver": "Driver",
+      "safety_officer": "Safety Officer",
+      "financial_analyst": "Financial Analyst"
+    }
+    return mapping[name] || name.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+  }
+
+  const resources = [
+    { key: 'permission_fleet', label: 'Fleet' },
+    { key: 'permission_driver', label: 'Driver' },
+    { key: 'permission_trips', label: 'Trips' },
+    { key: 'permission_fuel', label: 'Fuel/Exp.' },
+    { key: 'permission_analytics', label: 'Analytics' }
   ]
 
   return (
@@ -107,7 +142,7 @@ export default function SettingsPage() {
       {/* General Settings Column */}
       <div className="lg:col-span-5 rounded-stamp border border-border bg-surface p-6">
         <h2 className="text-xs font-bold text-ink uppercase tracking-wider mb-6 pb-2 border-b border-border/60">
-          General
+          General Settings
         </h2>
         
         <form onSubmit={handleSave} className="space-y-4">
@@ -178,90 +213,73 @@ export default function SettingsPage() {
       </div>
 
       {/* Role-Based Access Control Column */}
-      <div className="lg:col-span-7 rounded-stamp border border-border bg-surface p-6">
-        <div className="flex items-center gap-2 mb-6 pb-2 border-b border-border/60 justify-between">
-          <h2 className="text-xs font-bold text-ink uppercase tracking-wider">
-            Role-Based Access (RBAC)
-          </h2>
-          <ShieldCheck size={16} className="text-accent" />
-        </div>
+      <div className="lg:col-span-7 rounded-stamp border border-border bg-surface p-6 flex flex-col justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-6 pb-2 border-b border-border/60 justify-between">
+            <h2 className="text-xs font-bold text-ink uppercase tracking-wider">
+              Role-Based Access (RBAC)
+            </h2>
+            <ShieldCheck size={16} className="text-accent" />
+          </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-border/80 text-[10px] uppercase tracking-wide text-ink-muted font-medium">
-                <th className="py-2.5 font-semibold text-left">Role</th>
-                <th className="py-2.5 font-semibold text-center">Fleet</th>
-                <th className="py-2.5 font-semibold text-center">Driver</th>
-                <th className="py-2.5 font-semibold text-center">Trips</th>
-                <th className="py-2.5 font-semibold text-center">Fuel/Exp.</th>
-                <th className="py-2.5 font-semibold text-center">Analytics</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/40">
-              {rbacData.map((row) => (
-                <tr key={row.role} className="hover:bg-paper/30 transition-colors">
-                  <td className="py-3 font-medium text-ink">{row.role}</td>
-                  
-                  {/* Fleet */}
-                  <td className="py-3 text-center">
-                    {row.fleet === '✓' ? (
-                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-accent/15 text-accent text-sm font-semibold">✓</span>
-                    ) : row.fleet === 'view' ? (
-                      <span className="font-medium text-ink-muted italic">view</span>
-                    ) : (
-                      <span className="text-ink-muted/40 font-mono">--</span>
-                    )}
-                  </td>
+          {rbacSuccessMsg && (
+            <p className="stamp border-accent px-3 py-1.5 text-xs text-accent bg-accent/5 font-semibold mb-4">
+              {rbacSuccessMsg}
+            </p>
+          )}
+          {rbacErrorMsg && (
+            <p className="stamp border-danger px-3 py-1.5 text-xs text-danger bg-danger/5 mb-4">
+              {rbacErrorMsg}
+            </p>
+          )}
 
-                  {/* Driver */}
-                  <td className="py-3 text-center">
-                    {row.driver === '✓' ? (
-                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-accent/15 text-accent text-sm font-semibold">✓</span>
-                    ) : row.driver === 'view' ? (
-                      <span className="font-medium text-ink-muted italic">view</span>
-                    ) : (
-                      <span className="text-ink-muted/40 font-mono">--</span>
-                    )}
-                  </td>
-
-                  {/* Trips */}
-                  <td className="py-3 text-center">
-                    {row.trips === '✓' ? (
-                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-accent/15 text-accent text-sm font-semibold">✓</span>
-                    ) : row.trips === 'view' ? (
-                      <span className="font-medium text-ink-muted italic">view</span>
-                    ) : (
-                      <span className="text-ink-muted/40 font-mono">--</span>
-                    )}
-                  </td>
-
-                  {/* Fuel/Exp */}
-                  <td className="py-3 text-center">
-                    {row.fuel === '✓' ? (
-                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-accent/15 text-accent text-sm font-semibold">✓</span>
-                    ) : row.fuel === 'view' ? (
-                      <span className="font-medium text-ink-muted italic">view</span>
-                    ) : (
-                      <span className="text-ink-muted/40 font-mono">--</span>
-                    )}
-                  </td>
-
-                  {/* Analytics */}
-                  <td className="py-3 text-center">
-                    {row.analytics === '✓' ? (
-                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-accent/15 text-accent text-sm font-semibold">✓</span>
-                    ) : row.analytics === 'view' ? (
-                      <span className="font-medium text-ink-muted italic">view</span>
-                    ) : (
-                      <span className="text-ink-muted/40 font-mono">--</span>
-                    )}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-border/80 text-[10px] uppercase tracking-wide text-ink-muted font-medium">
+                  <th className="py-2.5 font-semibold text-left">Role</th>
+                  <th className="py-2.5 font-semibold text-center">Fleet</th>
+                  <th className="py-2.5 font-semibold text-center">Driver</th>
+                  <th className="py-2.5 font-semibold text-center">Trips</th>
+                  <th className="py-2.5 font-semibold text-center">Fuel/Exp.</th>
+                  <th className="py-2.5 font-semibold text-center">Analytics</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border/40">
+                {rbacList.map((role) => (
+                  <tr key={role.id} className="hover:bg-paper/30 transition-colors">
+                    <td className="py-3 font-medium text-ink">{getRoleFriendlyName(role.name)}</td>
+                    
+                    {resources.map((res) => (
+                      <td key={res.key} className="py-2 text-center">
+                        <select
+                          value={role[res.key]}
+                          disabled={user?.role !== 'fleet_manager'}
+                          onChange={(e) => handlePermissionChange(role.id, res.key, e.target.value)}
+                          className="bg-paper border border-border rounded-stamp text-[11px] text-ink outline-none px-1.5 py-1 focus:border-accent disabled:opacity-100 disabled:bg-transparent disabled:border-transparent text-center font-semibold"
+                        >
+                          <option value="write">✓ Full</option>
+                          <option value="read">view</option>
+                          <option value="none">-- None</option>
+                        </select>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
+
+        {user?.role === 'fleet_manager' && rbacList.length > 0 && (
+          <button
+            onClick={handleSaveRbac}
+            disabled={isSubmittingRbac}
+            className="self-end mt-6 rounded-stamp bg-accent px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+          >
+            {isSubmittingRbac ? 'Saving Permissions...' : 'Save RBAC Permissions'}
+          </button>
+        )}
       </div>
     </div>
   )

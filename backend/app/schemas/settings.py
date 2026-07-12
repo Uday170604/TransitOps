@@ -16,3 +16,23 @@ class SettingsResponse(SettingsBase):
 
     class Config:
         from_attributes = True
+
+class RolePermissionResponse(BaseModel):
+    id: int
+    name: str
+    permission_fleet: str
+    permission_driver: str
+    permission_trips: str
+    permission_fuel: str
+    permission_analytics: str
+
+    class Config:
+        from_attributes = True
+
+class RolePermissionUpdate(BaseModel):
+    id: int
+    permission_fleet: str
+    permission_driver: str
+    permission_trips: str
+    permission_fuel: str
+    permission_analytics: str

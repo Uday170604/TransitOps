@@ -1,7 +1,9 @@
 from typing import List
 from fastapi import Depends, HTTPException, status
+from sqlalchemy.orm import Session
 from app.models.user import User
-from app.core.deps import get_current_user
+from app.models.role import Role
+from app.core.deps import get_db, get_current_user
 
 class RoleChecker:
     def __init__(self, allowed_roles: List[str]):
@@ -13,6 +15,39 @@ class RoleChecker:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have permission to access this resource."
             )
+        return current_user
+
+class PermissionChecker:
+    def __init__(self, resource: str, action: str):
+        self.resource = resource  # 'fleet', 'driver', 'trips', 'fuel', 'analytics'
+        self.action = action      # 'read', 'write'
+
+    def __call__(self, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+        if not current_user.role_id:
+            role = db.query(Role).filter(Role.name == current_user.role).first()
+        else:
+            role = db.query(Role).filter(Role.id == current_user.role_id).first()
+
+        if not role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to access this resource."
+            )
+
+        perm_field = f"permission_{self.resource}"
+        user_permission = getattr(role, perm_field, "none")
+
+        if self.action == "write" and user_permission != "write":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to access this resource."
+            )
+        elif self.action == "read" and user_permission not in ["read", "write"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to access this resource."
+            )
+
         return current_user
 
 # Role hierarchy mapping (higher value represents higher privilege)

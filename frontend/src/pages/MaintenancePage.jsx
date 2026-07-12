@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { Plus, X, Wrench } from 'lucide-react'
 import StatusBadge from '../components/layout/StatusBadge.jsx'
 import { getMaintenanceLogs, getVehicles, createMaintenanceLog, closeMaintenanceLog } from '../lib/api.js'
+import { useSettings } from '../context/SettingsContext.jsx'
 
 export default function MaintenancePage() {
+  const { formatCurrency, currencySymbol } = useSettings()
   const [logs, setLogs] = useState([])
   const [vehicles, setVehicles] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -74,13 +76,19 @@ export default function MaintenancePage() {
         setIsSubmitting(false)
         return setFormError('End date is required for closed logs.')
       }
-      const costVal = parseFloat(cost)
-      if (isNaN(costVal) || costVal < 0) {
+      const inputCost = parseFloat(cost)
+      if (isNaN(inputCost) || inputCost < 0) {
         setIsSubmitting(false)
         return setFormError('Cost must be 0 or greater.')
       }
+      
+      let dbCostVal = inputCost
+      if (currencySymbol === '$') dbCostVal = inputCost * 80
+      else if (currencySymbol === '€') dbCostVal = inputCost * 90
+      else if (currencySymbol === '£') dbCostVal = inputCost * 100
+      
       payload.end_date = endDate
-      payload.cost = costVal
+      payload.cost = dbCostVal
     } else {
       payload.end_date = null
       payload.cost = null
@@ -114,14 +122,19 @@ export default function MaintenancePage() {
       setIsClosingSubmit(false)
       return setCloseError('End date is required.')
     }
-    const costVal = parseFloat(closeCost)
-    if (isNaN(costVal) || costVal < 0) {
+    const inputCost = parseFloat(closeCost)
+    if (isNaN(inputCost) || inputCost < 0) {
       setIsClosingSubmit(false)
       return setCloseError('Cost must be 0 or greater.')
     }
 
+    let dbCostVal = inputCost
+    if (currencySymbol === '$') dbCostVal = inputCost * 80
+    else if (currencySymbol === '€') dbCostVal = inputCost * 90
+    else if (currencySymbol === '£') dbCostVal = inputCost * 100
+
     try {
-      await closeMaintenanceLog(closingLog.id, closeEndDate, costVal)
+      await closeMaintenanceLog(closingLog.id, closeEndDate, dbCostVal)
       setClosingLog(null)
       setCloseCost('')
       loadData()
@@ -192,7 +205,7 @@ export default function MaintenancePage() {
                     <td className="px-4 py-3 font-mono text-xs text-ink-muted">{r.start_date}</td>
                     <td className="px-4 py-3 font-mono text-xs text-ink-muted">{r.end_date || '—'}</td>
                     <td className="px-4 py-3 font-mono text-xs text-ink-muted">
-                      {r.cost !== null ? `₹${r.cost.toLocaleString()}` : '—'}
+                      {r.cost !== null ? formatCurrency(r.cost) : '—'}
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={r.status === 'Active' ? 'In Shop' : 'Available'} label={r.status} />
@@ -324,7 +337,7 @@ export default function MaintenancePage() {
                   </div>
                   <div>
                     <label htmlFor="m-cost" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                      Cost (₹)
+                      Cost ({currencySymbol})
                     </label>
                     <input
                       id="m-cost"
@@ -405,7 +418,7 @@ export default function MaintenancePage() {
                   </div>
                   <div>
                     <label htmlFor="c-cost" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                      Maintenance Cost (₹)
+                      Maintenance Cost ({currencySymbol})
                     </label>
                     <input
                       id="c-cost"

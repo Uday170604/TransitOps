@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.deps import get_db, get_current_user
-from app.core.permissions import RoleChecker
+from app.core.permissions import PermissionChecker
 from app.models.maintenance import MaintenanceLog
 from app.models.vehicle import Vehicle
 from app.models.user import User
@@ -12,8 +12,8 @@ from app.schemas.user import ApiResponse
 
 router = APIRouter()
 
-require_fleet_manager = Depends(RoleChecker(["fleet_manager"]))
-require_auth = Depends(get_current_user)
+require_fleet_manager = Depends(PermissionChecker("fleet", "write"))
+require_auth = Depends(PermissionChecker("fleet", "read"))
 
 @router.post("/", response_model=ApiResponse[MaintenanceLogResponse], status_code=status.HTTP_201_CREATED)
 def create_maintenance(

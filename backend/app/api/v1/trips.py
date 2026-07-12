@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.deps import get_db, get_current_user
-from app.core.permissions import RoleChecker
+from app.core.permissions import PermissionChecker
 from app.models.trip import Trip
 from app.models.vehicle import Vehicle
 from app.models.driver import Driver
@@ -13,8 +13,8 @@ from app.schemas.user import ApiResponse
 
 router = APIRouter()
 
-require_driver_or_manager = Depends(RoleChecker(["driver", "fleet_manager"]))
-require_auth = Depends(get_current_user)
+require_driver_or_manager = Depends(PermissionChecker("trips", "write"))
+require_auth = Depends(PermissionChecker("trips", "read"))
 
 @router.post("/", response_model=ApiResponse[TripResponse], status_code=status.HTTP_201_CREATED)
 def create_trip(

@@ -7,6 +7,7 @@ from app.models.maintenance import MaintenanceLog
 from app.models.fuel_log import FuelLog
 from app.models.expense import Expense
 from app.models.role import Role
+from app.models.settings import SystemSettings
 from app.models.document import VehicleDocument
 from app.core.security import get_password_hash
 from datetime import date, timedelta
@@ -26,9 +27,39 @@ def seed_db():
             return
 
         print("Seeding roles...")
+        roles_permissions = {
+            "fleet_manager": {
+                "permission_fleet": "write",
+                "permission_driver": "write",
+                "permission_trips": "write",
+                "permission_fuel": "write",
+                "permission_analytics": "write"
+            },
+            "safety_officer": {
+                "permission_fleet": "read",
+                "permission_driver": "write",
+                "permission_trips": "read",
+                "permission_fuel": "none",
+                "permission_analytics": "none"
+            },
+            "financial_analyst": {
+                "permission_fleet": "read",
+                "permission_driver": "none",
+                "permission_trips": "none",
+                "permission_fuel": "write",
+                "permission_analytics": "write"
+            },
+            "driver": {
+                "permission_fleet": "read",
+                "permission_driver": "read",
+                "permission_trips": "write",
+                "permission_fuel": "write",
+                "permission_analytics": "none"
+            }
+        }
         roles_map = {}
-        for role_name in ["fleet_manager", "driver", "safety_officer", "financial_analyst"]:
-            db_role = Role(name=role_name)
+        for role_name, perms in roles_permissions.items():
+            db_role = Role(name=role_name, **perms)
             db.add(db_role)
             db.flush()
             roles_map[role_name] = db_role.id

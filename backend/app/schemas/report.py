@@ -9,7 +9,12 @@ class VehicleReportDetail(BaseModel):
     total_operational_cost: float
     roi: float
 
+class MonthlyRevenueSummary(BaseModel):
+    month: str
+    amount: float
+
 class FleetReportsSummary(BaseModel):
     vehicles: List[VehicleReportDetail]
     fleet_utilization_pct: float
     total_operational_cost: float
+    monthly_revenues: List[MonthlyRevenueSummary]

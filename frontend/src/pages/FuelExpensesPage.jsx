@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, X, Edit, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useSettings } from '../context/SettingsContext.jsx'
 import {
   getVehicles,
   getFuelLogs,
@@ -16,6 +17,7 @@ import {
 export default function FuelExpensesPage() {
   const { user } = useAuth()
   const isManagerOrDriver = user?.role === 'fleet_manager' || user?.role === 'driver'
+  const { formatCurrency, currencySymbol } = useSettings()
 
   const [expenses, setExpenses] = useState([])
   const [vehicles, setVehicles] = useState([])
@@ -102,7 +104,13 @@ export default function FuelExpensesPage() {
     setSelectedVehicleId(item.vehicle_id.toString())
     setType(item.type)
     setDate(item.date)
-    setCost(item.cost.toString())
+    
+    let costVal = item.cost
+    if (currencySymbol === '$') costVal = Math.round(item.cost / 80)
+    else if (currencySymbol === '€') costVal = Math.round(item.cost / 90)
+    else if (currencySymbol === '£') costVal = Math.round(item.cost / 100)
+    setCost(costVal.toString())
+    
     setDescription(item.detail || '')
     if (item.type === 'Fuel') {
       setLiters(item.liters.toString())
@@ -135,11 +143,16 @@ export default function FuelExpensesPage() {
     if (!selectedVehicleId) return setFormError('Vehicle is required.')
     if (!date) return setFormError('Date is required.')
 
-    const costVal = parseFloat(cost)
-    if (isNaN(costVal) || costVal <= 0) {
+    const inputCost = parseFloat(cost)
+    if (isNaN(inputCost) || inputCost <= 0) {
       setIsSubmitting(false)
       return setFormError('Cost / Amount must be greater than 0.')
     }
+
+    let costVal = inputCost
+    if (currencySymbol === '$') costVal = inputCost * 80
+    else if (currencySymbol === '€') costVal = inputCost * 90
+    else if (currencySymbol === '£') costVal = inputCost * 100
 
     try {
       if (type === 'Fuel') {
@@ -317,7 +330,7 @@ export default function FuelExpensesPage() {
                       {l.type === 'Fuel' ? `${l.liters} L${l.detail ? ` (${l.detail})` : ''}` : l.detail}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-xs text-ink font-semibold">
-                      ₹{l.cost.toLocaleString()}
+                      {formatCurrency(l.cost)}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {isManagerOrDriver && (
@@ -447,7 +460,7 @@ export default function FuelExpensesPage() {
                   </div>
                   <div>
                     <label htmlFor="fuel-cost" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                      Cost (₹)
+                      Cost ({currencySymbol})
                     </label>
                     <input
                       id="fuel-cost"
@@ -492,7 +505,7 @@ export default function FuelExpensesPage() {
                   </div>
                   <div>
                     <label htmlFor="exp-cost" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                      Amount (₹)
+                      Amount ({currencySymbol})
                     </label>
                     <input
                       id="exp-cost"

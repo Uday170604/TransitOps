@@ -2,21 +2,23 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.deps import get_db, get_current_user
 from app.models.settings import SystemSettings
+from app.models.role import Role
 from app.models.user import User
-from app.schemas.settings import SettingsResponse, SettingsUpdate
+from app.schemas.settings import SettingsResponse, SettingsUpdate, RolePermissionResponse, RolePermissionUpdate
 from app.schemas.user import ApiResponse
+from typing import List
 
 router = APIRouter()
 
 @router.get("/", response_model=ApiResponse[SettingsResponse])
 def get_settings(
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
-    settings = db.query(SystemSettings).first()
+    settings = db.query(SystemSettings).filter(SystemSettings.user_id == current_user.id).first()
     if not settings:
-        # Create default settings
-        settings = SystemSettings()
+        # Create default settings for this user
+        settings = SystemSettings(user_id=current_user.id)
         db.add(settings)
         db.commit()
         db.refresh(settings)
@@ -32,11 +34,11 @@ def get_settings(
 def update_settings(
     data: SettingsUpdate,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
-    settings = db.query(SystemSettings).first()
+    settings = db.query(SystemSettings).filter(SystemSettings.user_id == current_user.id).first()
     if not settings:
-        settings = SystemSettings()
+        settings = SystemSettings(user_id=current_user.id)
         db.add(settings)
         db.commit()
         db.refresh(settings)
@@ -56,4 +58,48 @@ def update_settings(
         status_code=200,
         message="Settings updated successfully",
         data=SettingsResponse.model_validate(settings)
+    )
+
+@router.get("/rbac", response_model=ApiResponse[List[RolePermissionResponse]])
+def get_rbac_settings(
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user)
+):
+    roles = db.query(Role).order_by(Role.id).all()
+    return ApiResponse(
+        success=True,
+        status_code=200,
+        message="Role permissions retrieved successfully",
+        data=[RolePermissionResponse.model_validate(r) for r in roles]
+    )
+
+@router.put("/rbac", response_model=ApiResponse[List[RolePermissionResponse]])
+def update_rbac_settings(
+    updates: List[RolePermissionUpdate],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != "fleet_manager":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only fleet managers are authorized to modify RBAC permissions."
+        )
+
+    for update in updates:
+        role = db.query(Role).filter(Role.id == update.id).first()
+        if role:
+            role.permission_fleet = update.permission_fleet
+            role.permission_driver = update.permission_driver
+            role.permission_trips = update.permission_trips
+            role.permission_fuel = update.permission_fuel
+            role.permission_analytics = update.permission_analytics
+
+    db.commit()
+    
+    roles = db.query(Role).order_by(Role.id).all()
+    return ApiResponse(
+        success=True,
+        status_code=200,
+        message="Role permissions updated successfully",
+        data=[RolePermissionResponse.model_validate(r) for r in roles]
     )
