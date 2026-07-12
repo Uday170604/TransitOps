@@ -21,6 +21,7 @@ export default function VehiclesPage() {
   const [odometer, setOdometer] = useState('0')
   const [acqCost, setAcqCost] = useState('')
   const [status, setStatus] = useState('Available')
+  const [region, setRegion] = useState('')
 
   async function loadVehicles() {
     try {
@@ -68,6 +69,7 @@ export default function VehiclesPage() {
         odometer: parseFloat(odometer),
         acquisition_cost: parseFloat(acqCost),
         status,
+        region: region.trim() || null,
       })
       // Reset form
       setRegNum('')
@@ -77,6 +79,7 @@ export default function VehiclesPage() {
       setOdometer('0')
       setAcqCost('')
       setStatus('Available')
+      setRegion('')
       setIsModalOpen(false)
       loadVehicles()
     } catch (err) {
@@ -121,6 +124,7 @@ export default function VehiclesPage() {
                 <th className="px-4 py-3 font-medium">Name / Model</th>
                 <th className="px-4 py-3 font-medium">Type</th>
                 <th className="px-4 py-3 font-medium">Max Load</th>
+                <th className="px-4 py-3 font-medium">Region</th>
                 <th className="px-4 py-3 font-medium">Odometer</th>
                 <th className="px-4 py-3 font-medium">Acquisition Cost</th>
                 <th className="px-4 py-3 font-medium">Status</th>
@@ -129,7 +133,7 @@ export default function VehiclesPage() {
             <tbody>
               {vehicles.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="px-4 py-8 text-center text-ink-muted text-sm">
+                  <td colSpan="8" className="px-4 py-8 text-center text-ink-muted text-sm">
                     No vehicles registered. Click "Register vehicle" to add one.
                   </td>
                 </tr>
@@ -140,6 +144,7 @@ export default function VehiclesPage() {
                     <td className="px-4 py-3 text-ink">{v.model}</td>
                     <td className="px-4 py-3 text-ink-muted">{v.type}</td>
                     <td className="px-4 py-3 text-ink-muted">{v.max_load_capacity} kg</td>
+                    <td className="px-4 py-3 text-ink-muted">{v.region || '—'}</td>
                     <td className="px-4 py-3 font-mono text-xs text-ink-muted">
                       {v.odometer.toLocaleString()} km
                     </td>
@@ -208,7 +213,7 @@ export default function VehiclesPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label htmlFor="type" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
                     Vehicle Type
@@ -241,6 +246,19 @@ export default function VehiclesPage() {
                     <option value="In Shop">In Shop</option>
                     <option value="Retired">Retired</option>
                   </select>
+                </div>
+                <div>
+                  <label htmlFor="region" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                    Region / Hub
+                  </label>
+                  <input
+                    id="region"
+                    type="text"
+                    placeholder="e.g. East"
+                    value={region}
+                    onChange={(e) => setRegion(e.target.value)}
+                    className="w-full rounded-stamp border border-border bg-paper px-2 py-1.5 text-xs text-ink outline-none focus:border-accent"
+                  />
                 </div>
               </div>
 
