@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar.jsx'
 import Topbar from './Topbar.jsx'
@@ -15,12 +16,13 @@ const TITLES = {
 export default function AppShell() {
   const { pathname } = useLocation()
   const title = TITLES[pathname] || 'TransitOps'
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
 
   return (
     <div className="flex min-h-screen bg-paper">
-      <Sidebar />
+      <Sidebar isOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar title={title} />
+        <Topbar title={title} onMenuClick={() => setIsMobileSidebarOpen(true)} />
         <main className="flex-1 overflow-y-auto px-6 py-6">
           <Outlet />
         </main>
