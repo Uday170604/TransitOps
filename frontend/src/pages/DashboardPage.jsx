@@ -1,18 +1,113 @@
+import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { ROLE_LABELS } from '../lib/roles.js'
+import { getVehicles, getDrivers, getTrips } from '../lib/api.js'
 
-const KPIS = [
-  { label: 'Active Vehicles', value: 42 },
-  { label: 'Available Vehicles', value: 27 },
-  { label: 'Vehicles in Maintenance', value: 5 },
-  { label: 'Active Trips', value: 11 },
-  { label: 'Pending Trips', value: 6 },
-  { label: 'Drivers On Duty', value: 18 },
-  { label: 'Fleet Utilization', value: '64%' },
-]
+function getVehicleRegion(regNum) {
+  if (!regNum) return 'Other'
+  const prefix = regNum.trim().substring(0, 2).toUpperCase()
+  if (prefix === 'GJ') return 'Gujarat'
+  if (prefix === 'MH') return 'Maharashtra'
+  if (prefix === 'DL') return 'Delhi'
+  if (prefix === 'KA') return 'Karnataka'
+  if (prefix === 'TN') return 'Tamil Nadu'
+  return 'Other'
+}
 
 export default function DashboardPage() {
   const { user } = useAuth()
+  const [vehicles, setVehicles] = useState([])
+  const [drivers, setDrivers] = useState([])
+  const [trips, setTrips] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  // Filter states
+  const [selectedType, setSelectedType] = useState('All')
+  const [selectedStatus, setSelectedStatus] = useState('All')
+  const [selectedRegion, setSelectedRegion] = useState('All')
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        setIsLoading(true)
+        const [vehiclesData, driversData, tripsData] = await Promise.all([
+          getVehicles(),
+          getDrivers(),
+          getTrips(),
+        ])
+        setVehicles(vehiclesData || [])
+        setDrivers(driversData || [])
+        setTrips(tripsData || [])
+      } catch (err) {
+        setError(err.message || 'Failed to load dashboard data.')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    loadData()
+  }, [])
+
+  // Dynamic filter options
+  const vehicleTypes = ['All', ...new Set(vehicles.map((v) => v.type).filter(Boolean))]
+  const statuses = ['All', 'Available', 'On Trip', 'In Shop', 'Retired']
+  const regions = ['All', ...new Set(vehicles.map((v) => getVehicleRegion(v.registration_number)).filter(Boolean))]
+
+  // Apply filters
+  const filteredVehicles = vehicles.filter((v) => {
+    const matchesType = selectedType === 'All' || v.type === selectedType
+    const matchesStatus = selectedStatus === 'All' || v.status === selectedStatus
+    const matchesRegion = selectedRegion === 'All' || getVehicleRegion(v.registration_number) === selectedRegion
+    return matchesType && matchesStatus && matchesRegion
+  })
+
+  // Filtered vehicle IDs for trip filtering
+  const filteredVehicleIds = new Set(filteredVehicles.map((v) => v.id))
+
+  // Apply filters to trips (trips associated with filtered vehicles)
+  const filteredTrips = trips.filter((t) => filteredVehicleIds.has(t.vehicle_id))
+
+  // Calculate KPIs
+  const activeVehicles = filteredVehicles.filter((v) => v.status === 'On Trip').length
+  const availableVehicles = filteredVehicles.filter((v) => v.status === 'Available').length
+  const maintenanceVehicles = filteredVehicles.filter((v) => v.status === 'In Shop').length
+  
+  const activeTrips = filteredTrips.filter((t) => t.status === 'Dispatched').length
+  const pendingTrips = filteredTrips.filter((t) => t.status === 'Draft').length
+
+  const driversOnDuty = drivers.filter(d => d.status === 'Available' || d.status === 'On Trip').length
+
+  const totalOperationalVehicles = activeVehicles + availableVehicles + maintenanceVehicles
+  const fleetUtilization = totalOperationalVehicles > 0 
+    ? Math.round((activeVehicles / totalOperationalVehicles) * 100) 
+    : 0
+
+  const KPIS = [
+    { label: 'Active Vehicles', value: activeVehicles },
+    { label: 'Available Vehicles', value: availableVehicles },
+    { label: 'Vehicles in Maintenance', value: maintenanceVehicles },
+    { label: 'Active Trips', value: activeTrips },
+    { label: 'Pending Trips', value: pendingTrips },
+    { label: 'Drivers On Duty', value: driversOnDuty },
+    { label: 'Fleet Utilization', value: `${fleetUtilization}%` },
+  ]
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <p className="text-sm text-ink-muted animate-pulse">Loading dashboard metrics...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-stamp border border-danger bg-surface p-4 text-danger">
+        <p className="font-semibold">Error Loading Dashboard</p>
+        <p className="text-sm">{error}</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -24,18 +119,55 @@ export default function DashboardPage() {
       </div>
 
       <div className="flex flex-wrap gap-3">
-        {['Vehicle type', 'Status', 'Region'].map((filter) => (
+        <div>
           <select
-            key={filter}
-            disabled
-            className="rounded-stamp border border-border bg-surface px-3 py-2 text-xs text-ink-muted"
+            value={selectedType}
+            onChange={(e) => setSelectedType(e.target.value)}
+            className="rounded-stamp border border-border bg-surface px-3 py-2 text-xs text-ink outline-none focus:border-accent"
           >
-            <option>{filter}: All</option>
+            {vehicleTypes.map((type) => (
+              <option key={type} value={type}>Vehicle Type: {type}</option>
+            ))}
           </select>
-        ))}
-        <span className="self-center text-[11px] text-ink-muted">
-          Filters activate once vehicle data is wired to the backend.
-        </span>
+        </div>
+
+        <div>
+          <select
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
+            className="rounded-stamp border border-border bg-surface px-3 py-2 text-xs text-ink outline-none focus:border-accent"
+          >
+            {statuses.map((status) => (
+              <option key={status} value={status}>Status: {status}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <select
+            value={selectedRegion}
+            onChange={(e) => setSelectedRegion(e.target.value)}
+            className="rounded-stamp border border-border bg-surface px-3 py-2 text-xs text-ink outline-none focus:border-accent"
+          >
+            {regions.map((reg) => (
+              <option key={reg} value={reg}>Region: {reg}</option>
+            ))}
+          </select>
+        </div>
+
+        {(selectedType !== 'All' || selectedStatus !== 'All' || selectedRegion !== 'All') && (
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedType('All')
+              setSelectedStatus('All')
+              setSelectedRegion('All')
+            }}
+            className="rounded-stamp border border-border bg-paper px-3 py-2 text-xs text-ink-muted hover:text-ink"
+          >
+            Clear Filters
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
@@ -51,8 +183,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="rounded-stamp border border-dashed border-border p-6 text-center text-sm text-ink-muted">
-        Charts and trend analytics land here once <code className="font-mono">/reports</code>{' '}
-        endpoints are available.
+        Active status of fleet operations: <span className="font-semibold text-ink">{filteredVehicles.length}</span> vehicles matched.
       </div>
     </div>
   )

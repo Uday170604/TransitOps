@@ -7,7 +7,7 @@ const DEMO_USERS = [
   { id: 1, name: 'Priya Shah', email: 'fleet@transitops.dev', role: ROLES.FLEET_MANAGER },
   { id: 2, name: 'Alex Menon', email: 'driver@transitops.dev', role: ROLES.DRIVER },
   { id: 3, name: 'Ritu Nair', email: 'safety@transitops.dev', role: ROLES.SAFETY_OFFICER },
-  { id: 4, name: 'Dev Patel', email: 'finance@transitops.dev', role: ROLES.FINANCIAL_ANALYST },
+  { id: 4, name: 'Dev Patel', email: 'analyst@transitops.dev', role: ROLES.FINANCIAL_ANALYST },
 ]
 
 const DEMO_PASSWORD = 'demo1234'
