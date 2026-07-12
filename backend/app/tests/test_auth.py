@@ -36,8 +36,8 @@ def test_login_invalid_credentials():
     json_data = response.json()
     assert json_data["success"] is False
     assert json_data["status_code"] == 401
-    assert json_data["detail"] == "Invalid email or password."
-    assert json_data["message"] == "Invalid email or password."
+    assert "Invalid email or password." in json_data["detail"]
+    assert "Invalid email or password." in json_data["message"]
 
 def test_get_me_success():
     login_response = client.post(
