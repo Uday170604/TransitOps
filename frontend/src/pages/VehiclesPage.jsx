@@ -24,6 +24,8 @@ export default function VehiclesPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [sortField, setSortField] = useState('registration_number')
   const [sortDirection, setSortDirection] = useState('asc')
+  const [filterType, setFilterType] = useState('All')
+  const [filterStatus, setFilterStatus] = useState('All')
 
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -244,11 +246,14 @@ export default function VehiclesPage() {
 
   const filteredVehicles = vehicles.filter((v) => {
     const term = searchTerm.toLowerCase()
-    return (
+    const matchesSearch = (
       v.registration_number.toLowerCase().includes(term) ||
       v.model.toLowerCase().includes(term) ||
       (v.region && v.region.toLowerCase().includes(term))
     )
+    const matchesType = filterType === 'All' || v.type === filterType
+    const matchesStatus = filterStatus === 'All' || v.status === filterStatus
+    return matchesSearch && matchesType && matchesStatus
   })
 
   const sortedVehicles = [...filteredVehicles].sort((a, b) => {
@@ -268,15 +273,54 @@ export default function VehiclesPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-ink-muted" />
-          <input
-            type="text"
-            placeholder="Search by reg number, model, or region..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full rounded-stamp border border-border bg-surface pl-9 pr-3 py-1.5 text-xs text-ink outline-none focus:border-accent"
-          />
+        <div className="flex flex-wrap items-center gap-2 flex-1">
+          <div className="relative flex-1 max-w-sm min-w-[200px]">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-ink-muted" />
+            <input
+              type="text"
+              placeholder="Search by reg number, model, or region..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded-stamp border border-border bg-surface pl-9 pr-3 py-1.5 text-xs text-ink outline-none focus:border-accent"
+            />
+          </div>
+          
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="rounded-stamp border border-border bg-surface px-2 py-1.5 text-xs text-ink outline-none focus:border-accent"
+          >
+            <option value="All">All Types</option>
+            <option value="Truck">Truck</option>
+            <option value="Van">Van</option>
+            <option value="Mini">Mini</option>
+            <option value="SUV">SUV</option>
+          </select>
+
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="rounded-stamp border border-border bg-surface px-2 py-1.5 text-xs text-ink outline-none focus:border-accent"
+          >
+            <option value="All">All Statuses</option>
+            <option value="Available">Available</option>
+            <option value="On Trip">On Trip</option>
+            <option value="In Shop">In Shop</option>
+            <option value="Retired">Retired</option>
+          </select>
+
+          {(filterType !== 'All' || filterStatus !== 'All') && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilterType('All')
+                setFilterStatus('All')
+              }}
+              className="rounded-stamp border border-border bg-paper px-2.5 py-1.5 text-xs text-ink-muted hover:text-ink transition-colors"
+            >
+              Reset
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-2 self-end">
           <p className="text-xs text-ink-muted hidden md:block">

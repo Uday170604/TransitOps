@@ -8,18 +8,20 @@ import {
   Fuel,
   BarChart3,
   X,
+  Settings,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { canAccess } from '../../lib/roles.js'
 
 const NAV_ITEMS = [
   { key: 'dashboard', to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { key: 'vehicles', to: '/vehicles', label: 'Vehicle Registry', icon: Truck },
+  { key: 'vehicles', to: '/vehicles', label: 'Fleet', icon: Truck },
   { key: 'drivers', to: '/drivers', label: 'Drivers', icon: Users },
   { key: 'trips', to: '/trips', label: 'Trips', icon: Route },
   { key: 'maintenance', to: '/maintenance', label: 'Maintenance', icon: Wrench },
   { key: 'fuelExpenses', to: '/fuel-expenses', label: 'Fuel & Expenses', icon: Fuel },
-  { key: 'reports', to: '/reports', label: 'Reports', icon: BarChart3 },
+  { key: 'reports', to: '/reports', label: 'Analytics', icon: BarChart3 },
+  { key: 'settings', to: '/settings', label: 'Settings', icon: Settings },
 ]
 
 export default function Sidebar({ isOpen, onClose }) {

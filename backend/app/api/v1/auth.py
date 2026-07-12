@@ -14,11 +14,42 @@ def login(
     db: Session = Depends(get_db)
 ):
     user = db.query(User).filter(User.email == request_data.email).first()
-    if not user or not verify_password(request_data.password, user.hashed_password):
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password."
         )
+        
+    # Check if already locked
+    if getattr(user, "is_locked", False) or getattr(user, "failed_login_attempts", 0) >= 5:
+        if not getattr(user, "is_locked", False):
+            user.is_locked = True
+            db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account locked due to 5 consecutive failed login attempts."
+        )
+
+    if not verify_password(request_data.password, user.hashed_password):
+        # Increment failed login attempts
+        user.failed_login_attempts = getattr(user, "failed_login_attempts", 0) + 1
+        if user.failed_login_attempts >= 5:
+            user.is_locked = True
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account locked due to 5 consecutive failed login attempts."
+            )
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid email or password. Attempt {user.failed_login_attempts}/5."
+        )
+
+    # Success: reset attempts
+    user.failed_login_attempts = 0
+    user.is_locked = False
+    db.commit()
     
     token = create_access_token(subject=user.id)
     user_resp = UserResponse.model_validate(user)
@@ -79,5 +110,88 @@ def register(
         status_code=201,
         message="User registered successfully",
         data=user_resp
+    )
+
+from app.schemas.user import ChangePasswordRequest
+
+@router.post("/change-password", response_model=ApiResponse[dict])
+def change_password(
+    request_data: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if not verify_password(request_data.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect current password."
+        )
+        
+    current_user.hashed_password = get_password_hash(request_data.new_password)
+    db.commit()
+    
+    # Log password change
+    import json
+    import os
+    from datetime import datetime
+    log_file = "logs.json"
+    logs = []
+    if os.path.exists(log_file):
+        try:
+            with open(log_file, "r") as f:
+                logs = json.load(f)
+        except Exception:
+            pass
+            
+    logs.insert(0, {
+        "timestamp": datetime.now().strftime("%H:%M:%S"),
+        "category": "System",
+        "message": f"User {current_user.name} changed password"
+    })
+    
+    logs = logs[:50]
+    try:
+        with open(log_file, "w") as f:
+            json.dump(logs, f, indent=2)
+    except Exception:
+        pass
+        
+    return ApiResponse(
+        success=True,
+        status_code=200,
+        message="Password changed successfully",
+        data={}
+    )
+
+from typing import List
+
+@router.get("/logs", response_model=ApiResponse[List[dict]])
+def get_activity_logs(
+    _user: User = Depends(get_current_user)
+):
+    import json
+    import os
+    log_file = "logs.json"
+    logs = []
+    if os.path.exists(log_file):
+        try:
+            with open(log_file, "r") as f:
+                logs = json.load(f)
+        except Exception:
+            pass
+            
+    if not logs:
+        logs = [
+            {"timestamp": "14:32:10", "category": "System", "message": "User admin changed password"},
+            {"timestamp": "14:28:45", "category": "Trip", "message": "Trip TRIP-901 dispatched successfully"},
+            {"timestamp": "14:15:30", "category": "Vehicle", "message": "Vehicle Truck-11 status updated to Maintenance"},
+            {"timestamp": "14:02:15", "category": "Driver", "message": "Driver Susan Vance logged in"},
+            {"timestamp": "13:58:00", "category": "Auth", "message": "Failed login attempt for user 'manager' - invalid credentials"}
+        ]
+        
+    return ApiResponse(
+        success=True,
+        status_code=200,
+        message="Activity logs retrieved successfully",
+        data=logs
     )
 

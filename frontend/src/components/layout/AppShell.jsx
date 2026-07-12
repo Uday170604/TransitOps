@@ -5,12 +5,13 @@ import Topbar from './Topbar.jsx'
 
 const TITLES = {
   '/': 'Dashboard',
-  '/vehicles': 'Vehicle Registry',
-  '/drivers': 'Driver Management',
-  '/trips': 'Trip Management',
+  '/vehicles': 'Fleet',
+  '/drivers': 'Drivers & Safety Profiles',
+  '/trips': 'Trip Dispatcher',
   '/maintenance': 'Maintenance',
   '/fuel-expenses': 'Fuel & Expenses',
   '/reports': 'Reports & Analytics',
+  '/settings': 'Settings & RBAC',
 }
 
 export default function AppShell() {

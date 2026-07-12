@@ -20,11 +20,41 @@ export default function LoginPage() {
     e.preventDefault()
     setError('')
     setIsSubmitting(true)
+
+    const emailClean = email.trim().toLowerCase()
+    const lockedKey = `transitops_lock_${emailClean}`
+    const attemptsKey = `transitops_attempts_${emailClean}`
+
+    // Client-side quick check
+    if (localStorage.getItem(lockedKey) === 'true') {
+      setError('Account locked after 5 failed attempts. Please contact support.')
+      setIsSubmitting(false)
+      return
+    }
+
     try {
       await login(email, password)
+      // Success: clear attempts
+      localStorage.removeItem(lockedKey)
+      localStorage.removeItem(attemptsKey)
       navigate(from, { replace: true })
     } catch (err) {
-      setError(err.message)
+      const errMsg = err.message || ''
+      if (errMsg.toLowerCase().includes('lock') || errMsg.toLowerCase().includes('locked')) {
+        localStorage.setItem(lockedKey, 'true')
+        setError('Account locked after 5 failed attempts. Please contact support.')
+      } else {
+        // Increment attempts
+        const currentAttempts = parseInt(localStorage.getItem(attemptsKey) || '0') + 1
+        localStorage.setItem(attemptsKey, currentAttempts.toString())
+        
+        if (currentAttempts >= 5) {
+          localStorage.setItem(lockedKey, 'true')
+          setError('Account locked after 5 failed attempts. Please contact support.')
+        } else {
+          setError(`${errMsg} (Attempt ${currentAttempts} of 5)`)
+        }
+      }
     } finally {
       setIsSubmitting(false)
     }

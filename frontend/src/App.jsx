@@ -10,6 +10,7 @@ import TripsPage from './pages/TripsPage.jsx'
 import MaintenancePage from './pages/MaintenancePage.jsx'
 import FuelExpensesPage from './pages/FuelExpensesPage.jsx'
 import ReportsPage from './pages/ReportsPage.jsx'
+import SettingsPage from './pages/SettingsPage.jsx'
 import UnauthorizedPage from './pages/UnauthorizedPage.jsx'
 import NotFoundPage from './pages/NotFoundPage.jsx'
 
@@ -72,6 +73,15 @@ function App() {
           element={
             <RoleGate moduleKey="reports">
               <ReportsPage />
+            </RoleGate>
+          }
+        />
+
+        <Route
+          path="/settings"
+          element={
+            <RoleGate moduleKey="settings">
+              <SettingsPage />
             </RoleGate>
           }
         />

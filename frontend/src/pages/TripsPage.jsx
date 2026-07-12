@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, X, Play, CheckCircle, XCircle } from 'lucide-react'
-import StatusBadge from '../components/layout/StatusBadge.jsx'
+import { CheckCircle2, XCircle, Play, CheckCircle, Search, AlertTriangle, ArrowRight } from 'lucide-react'
 import { getTrips, getVehicles, getDrivers, createTrip, updateTripStatus } from '../lib/api.js'
 
 export default function TripsPage() {
@@ -10,21 +9,21 @@ export default function TripsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
 
-  // New Trip Modal State
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [formError, setFormError] = useState('')
-
-  // New Trip Form Fields
-  const [source, setSource] = useState('')
-  const [destination, setDestination] = useState('')
+  // Create Trip Form Fields
+  const [source, setSource] = useState('Gandhinagar Depot')
+  const [destination, setDestination] = useState('Ahmedabad Hub')
   const [selectedVehicleId, setSelectedVehicleId] = useState('')
   const [selectedDriverId, setSelectedDriverId] = useState('')
   const [cargoWeight, setCargoWeight] = useState('')
   const [plannedDistance, setPlannedDistance] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formError, setFormError] = useState('')
+
+  // Live board search
+  const [searchTerm, setSearchTerm] = useState('')
 
   // Complete Trip Modal State
-  const [completingTrip, setCompletingTrip] = useState(null) // holds trip object to complete
+  const [completingTrip, setCompletingTrip] = useState(null)
   const [finalOdometer, setFinalOdometer] = useState('')
   const [completeError, setCompleteError] = useState('')
   const [isCompletingSubmit, setIsCompletingSubmit] = useState(false)
@@ -58,44 +57,40 @@ export default function TripsPage() {
     return new Date(expiryDate) < today
   }
 
-  // Filters for available vehicles and drivers
-  const availableVehicles = vehicles.filter((v) => v.status === 'Available')
-  const availableDrivers = drivers.filter(
-    (d) => d.status === 'Available' && !isLicenseExpired(d.license_expiry_date)
-  )
+  // Filter available drivers & vehicles
+  const availableVehicles = vehicles.filter(v => v.status === 'Available')
+  
+  // Enforce rule: Expired license or Suspended safety_status/status blocks from trip assignment
+  const availableDrivers = drivers.filter(d => {
+    const expired = isLicenseExpired(d.license_expiry_date)
+    const isSuspended = d.status === 'Suspended' || d.safety_status === 'Suspended'
+    return d.status === 'Available' && !expired && !isSuspended
+  })
 
   // Selected vehicle object for capacity checks
-  const selectedVehicleObj = vehicles.find((v) => v.id === parseInt(selectedVehicleId))
+  const selectedVehicleObj = vehicles.find(v => v.id === parseInt(selectedVehicleId))
 
-  // Handle Create Trip
+  // Capacity calculations
+  const weightVal = parseFloat(cargoWeight) || 0
+  const capacityExceeded = selectedVehicleObj && weightVal > selectedVehicleObj.max_load_capacity
+  const excessWeight = selectedVehicleObj ? Math.max(0, weightVal - selectedVehicleObj.max_load_capacity) : 0
+
+  // Check if dispatcher form is valid
+  const isFormValid = source.trim() !== '' && 
+                       destination.trim() !== '' && 
+                       selectedVehicleId !== '' && 
+                       selectedDriverId !== '' && 
+                       parseFloat(cargoWeight) > 0 && 
+                       parseFloat(plannedDistance) > 0 && 
+                       !capacityExceeded
+
+  // Create Trip handler
   async function handleCreateTrip(e) {
     e.preventDefault()
+    if (!isFormValid) return
+    
     setFormError('')
     setIsSubmitting(true)
-
-    if (!source.trim()) return setFormError('Source is required.')
-    if (!destination.trim()) return setFormError('Destination is required.')
-    if (!selectedVehicleId) return setFormError('Vehicle selection is required.')
-    if (!selectedDriverId) return setFormError('Driver selection is required.')
-
-    const cargoVal = parseFloat(cargoWeight)
-    if (isNaN(cargoVal) || cargoVal <= 0) {
-      setIsSubmitting(false)
-      return setFormError('Cargo weight must be greater than 0.')
-    }
-
-    const distVal = parseFloat(plannedDistance)
-    if (isNaN(distVal) || distVal <= 0) {
-      setIsSubmitting(false)
-      return setFormError('Planned distance must be greater than 0.')
-    }
-
-    if (selectedVehicleObj && cargoVal > selectedVehicleObj.max_load_capacity) {
-      setIsSubmitting(false)
-      return setFormError(
-        `Cargo weight (${cargoVal} kg) exceeds vehicle maximum capacity (${selectedVehicleObj.max_load_capacity} kg).`
-      );
-    }
 
     try {
       await createTrip({
@@ -103,49 +98,58 @@ export default function TripsPage() {
         destination: destination.trim(),
         vehicle_id: parseInt(selectedVehicleId),
         driver_id: parseInt(selectedDriverId),
-        cargo_weight: cargoVal,
-        planned_distance: distVal,
-        status: 'Draft',
+        cargo_weight: parseFloat(cargoWeight),
+        planned_distance: parseFloat(plannedDistance),
+        status: 'Draft' // Default status is Draft
       })
-      // Reset Form
-      setSource('')
-      setDestination('')
+      
+      // Clear form
+      setSource('Gandhinagar Depot')
+      setDestination('Ahmedabad Hub')
       setSelectedVehicleId('')
       setSelectedDriverId('')
       setCargoWeight('')
       setPlannedDistance('')
-      setIsModalOpen(false)
+      
+      // Reload lists
       loadData()
     } catch (err) {
-      setFormError(err.message || 'Failed to create trip.')
+      setFormError(err.message || 'Failed to dispatch/create trip.')
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  // Handle Dispatch
-  async function handleDispatch(tripId) {
+  // Handle direct dispatch of draft trip
+  const handleDispatch = async (tripId) => {
     try {
+      setIsLoading(true)
+      // Transition from Draft to Dispatched
       await updateTripStatus(tripId, 'Dispatched')
       loadData()
     } catch (err) {
-      alert(`Failed to dispatch trip: ${err.message}`)
+      alert(err.message || 'Failed to dispatch trip.')
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  // Handle Cancel
-  async function handleCancel(tripId) {
+  // Handle cancel trip
+  const handleCancel = async (tripId) => {
     if (!confirm('Are you sure you want to cancel this trip?')) return
     try {
+      setIsLoading(true)
       await updateTripStatus(tripId, 'Cancelled')
       loadData()
     } catch (err) {
-      alert(`Failed to cancel trip: ${err.message}`)
+      alert(err.message || 'Failed to cancel trip.')
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  // Handle Complete Submission
-  async function handleCompleteSubmit(e) {
+  // Complete trip handler
+  async function handleCompleteTripSubmit(e) {
     e.preventDefault()
     setCompleteError('')
     setIsCompletingSubmit(true)
@@ -170,300 +174,373 @@ export default function TripsPage() {
     }
   }
 
+  // Clear Form fields
+  const handleCancelForm = () => {
+    setSource('')
+    setDestination('')
+    setSelectedVehicleId('')
+    setSelectedDriverId('')
+    setCargoWeight('')
+    setPlannedDistance('')
+    setFormError('')
+  }
+
+  // Filter live board list
+  const filteredTrips = trips.filter(t => {
+    const term = searchTerm.toLowerCase()
+    return t.source.toLowerCase().includes(term) || 
+           t.destination.toLowerCase().includes(term) ||
+           (t.vehicle && t.vehicle.registration_number.toLowerCase().includes(term)) ||
+           (t.driver && t.driver.name.toLowerCase().includes(term)) ||
+           `TR00${t.id}`.toLowerCase().includes(term)
+  })
+
+  // Style helper for trip status badge
+  const renderStatusBadge = (statusValue) => {
+    let badgeStyle = 'px-2 py-0.5 rounded text-[10px] font-semibold border inline-block '
+    if (statusValue === 'Draft') {
+      badgeStyle += 'bg-gray-150 text-gray-500 border-gray-200'
+    } else if (statusValue === 'Dispatched') {
+      badgeStyle += 'bg-blue-50 text-blue-500 border-blue-200'
+    } else if (statusValue === 'Completed') {
+      badgeStyle += 'bg-green-50 text-green-500 border-green-200'
+    } else if (statusValue === 'Cancelled') {
+      badgeStyle += 'bg-red-50 text-red-500 border-red-200'
+    }
+    return <span className={badgeStyle}>{statusValue}</span>
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-ink-muted">
-          Manage trip lifecycle: Draft → Dispatched → Completed / Cancelled.
-        </p>
-        <button
-          type="button"
-          onClick={() => {
-            setFormError('')
-            setIsModalOpen(true)
-          }}
-          className="flex items-center gap-1.5 rounded-stamp bg-accent px-3 py-2 text-xs font-medium text-white transition-opacity hover:opacity-90"
-        >
-          <Plus size={14} /> New trip
-        </button>
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      {/* Left Column: Form & Lifecycle (approx 5 cols) */}
+      <div className="lg:col-span-5 space-y-6">
+        
+        {/* Trip Lifecycle Visual Flow */}
+        <div className="rounded-stamp border border-border bg-surface p-5 space-y-3">
+          <h3 className="text-[10px] font-bold text-ink-muted uppercase tracking-wider">
+            Trip Lifecycle
+          </h3>
+          <div className="flex items-center justify-between px-2 pt-2">
+            <div className="flex flex-col items-center">
+              <div className="h-5 w-5 rounded-full bg-[#10B981] flex items-center justify-center text-white text-[10px] font-bold">1</div>
+              <span className="text-[10px] font-semibold text-[#10B981] mt-1">Draft</span>
+            </div>
+            <div className="flex-1 h-0.5 bg-border mx-2 -mt-4" />
+            <div className="flex flex-col items-center">
+              <div className="h-5 w-5 rounded-full bg-[#3B82F6] flex items-center justify-center text-white text-[10px] font-bold">2</div>
+              <span className="text-[10px] font-semibold text-[#3B82F6] mt-1">Dispatched</span>
+            </div>
+            <div className="flex-1 h-0.5 bg-border mx-2 -mt-4" />
+            <div className="flex flex-col items-center">
+              <div className="h-5 w-5 rounded-full bg-[#6B7280] flex items-center justify-center text-white text-[10px] font-bold">3</div>
+              <span className="text-[10px] font-semibold text-ink-muted mt-1">Completed</span>
+            </div>
+            <div className="flex-1 h-0.5 bg-border mx-2 -mt-4" />
+            <div className="flex flex-col items-center">
+              <div className="h-5 w-5 rounded-full bg-[#EF4444] flex items-center justify-center text-white text-[10px] font-bold">4</div>
+              <span className="text-[10px] font-semibold text-danger mt-1">Cancelled</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Create Trip Form */}
+        <div className="rounded-stamp border border-border bg-surface p-6 space-y-4">
+          <h3 className="text-xs font-bold text-ink uppercase tracking-wider pb-2 border-b border-border/60">
+            Create Trip
+          </h3>
+
+          <form onSubmit={handleCreateTrip} className="space-y-4">
+            {formError && (
+              <p className="stamp border-danger px-2.5 py-1 text-xs text-danger bg-danger/5">{formError}</p>
+            )}
+
+            <div>
+              <label htmlFor="source" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                Source
+              </label>
+              <input
+                id="source"
+                type="text"
+                required
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                className="w-full rounded-stamp border border-border bg-paper px-3 py-2 text-xs text-ink outline-none focus:border-accent"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="destination" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                Destination
+              </label>
+              <input
+                id="destination"
+                type="text"
+                required
+                value={destination}
+                onChange={(e) => setDestination(e.target.value)}
+                className="w-full rounded-stamp border border-border bg-paper px-3 py-2 text-xs text-ink outline-none focus:border-accent"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="vehicle" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                Vehicle (Available Only)
+              </label>
+              <select
+                id="vehicle"
+                required
+                value={selectedVehicleId}
+                onChange={(e) => setSelectedVehicleId(e.target.value)}
+                className="w-full rounded-stamp border border-border bg-paper px-2 py-2 text-xs text-ink outline-none focus:border-accent"
+              >
+                <option value="">Select a vehicle...</option>
+                {availableVehicles.map(v => (
+                  <option key={v.id} value={v.id}>
+                    {v.model} ({v.registration_number}) - Cap: {v.max_load_capacity} kg
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="driver" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                Driver (Available Only)
+              </label>
+              <select
+                id="driver"
+                required
+                value={selectedDriverId}
+                onChange={(e) => setSelectedDriverId(e.target.value)}
+                className="w-full rounded-stamp border border-border bg-paper px-2 py-2 text-xs text-ink outline-none focus:border-accent"
+              >
+                <option value="">Select a driver...</option>
+                {availableDrivers.map(d => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} (License: {d.license_category})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="cargoWeight" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                  Cargo Weight (KG)
+                </label>
+                <input
+                  id="cargoWeight"
+                  type="number"
+                  required
+                  placeholder="e.g. 500"
+                  value={cargoWeight}
+                  onChange={(e) => setCargoWeight(e.target.value)}
+                  className="w-full rounded-stamp border border-border bg-paper px-3 py-2 text-xs text-ink outline-none focus:border-accent font-mono"
+                />
+              </div>
+              <div>
+                <label htmlFor="distance" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                  Planned Distance (KM)
+                </label>
+                <input
+                  id="distance"
+                  type="number"
+                  required
+                  placeholder="e.g. 150"
+                  value={plannedDistance}
+                  onChange={(e) => setPlannedDistance(e.target.value)}
+                  className="w-full rounded-stamp border border-border bg-paper px-3 py-2 text-xs text-ink outline-none focus:border-accent font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Validation warning block if capacity exceeded */}
+            {capacityExceeded && (
+              <div className="p-3 border border-[#EF4444] rounded bg-[#EF4444]/5 text-[#EF4444] text-xs font-semibold space-y-1">
+                <p>Vehicle Capacity: {selectedVehicleObj.max_load_capacity} kg</p>
+                <p>Cargo Weight: {weightVal} kg</p>
+                <div className="flex items-center gap-1.5 mt-1 border-t border-[#EF4444]/20 pt-1 text-[11px] uppercase tracking-wide">
+                  <AlertTriangle size={12} />
+                  <span>Capacity exceeded by {excessWeight} kg → dispatch blocked</span>
+                </div>
+              </div>
+            )}
+
+            {/* Actions Buttons */}
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="submit"
+                disabled={!isFormValid || isSubmitting}
+                className={`flex-1 rounded-stamp py-2.5 text-xs font-bold transition-all ${
+                  isFormValid 
+                    ? 'bg-accent hover:opacity-90 text-white' 
+                    : 'bg-border/60 text-ink-muted cursor-not-allowed'
+                }`}
+              >
+                {!isFormValid ? 'Dispatch (disabled)' : 'Dispatch Trip'}
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelForm}
+                className="px-4 py-2.5 text-xs font-semibold border border-danger text-danger bg-danger/5 hover:bg-danger hover:text-white transition-colors rounded-stamp"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
 
-      {isLoading ? (
-        <div className="flex h-32 items-center justify-center">
-          <p className="text-sm text-ink-muted animate-pulse">Loading trips...</p>
-        </div>
-      ) : error ? (
-        <div className="rounded-stamp border border-danger bg-surface p-4 text-danger text-sm">
-          {error}
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-stamp border border-border bg-surface">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-border text-[11px] uppercase tracking-wide text-ink-muted">
-                <th className="px-4 py-3 font-medium">Trip ID</th>
-                <th className="px-4 py-3 font-medium">Route</th>
-                <th className="px-4 py-3 font-medium">Vehicle</th>
-                <th className="px-4 py-3 font-medium">Driver</th>
-                <th className="px-4 py-3 font-medium">Distance</th>
-                <th className="px-4 py-3 font-medium">Cargo</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {trips.length === 0 ? (
-                <tr>
-                  <td colSpan="8" className="px-4 py-8 text-center text-ink-muted text-sm">
-                    No trips found. Click "New trip" to schedule one.
-                  </td>
-                </tr>
-              ) : (
-                trips.map((t) => (
-                  <tr key={t.id} className="border-b border-border last:border-0">
-                    <td className="px-4 py-3 font-mono text-xs text-ink font-semibold">TRP-{t.id}</td>
-                    <td className="px-4 py-3 text-ink">
-                      {t.source} → {t.destination}
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-xs text-ink font-medium">{t.vehicle?.model || 'Unknown'}</p>
-                      <p className="font-mono text-[10px] text-ink-muted">{t.vehicle?.registration_number}</p>
-                    </td>
-                    <td className="px-4 py-3 text-ink-muted text-xs">
-                      {t.driver?.name || 'Unassigned'}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-ink-muted">{t.planned_distance} km</td>
-                    <td className="px-4 py-3 font-mono text-xs text-ink-muted">{t.cargo_weight} kg</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={t.status} />
-                    </td>
-                    <td className="px-4 py-3 text-right">
+      {/* Right Column: Live Board (approx 7 cols) */}
+      <div className="lg:col-span-7 rounded-stamp border border-border bg-surface p-6 flex flex-col justify-between min-h-[500px]">
+        <div className="space-y-4 flex-1">
+          <div className="flex items-center justify-between border-b border-border/60 pb-3">
+            <h2 className="text-xs font-bold text-ink uppercase tracking-wider">
+              Live Board
+            </h2>
+            
+            {/* Live Board search */}
+            <div className="relative max-w-[200px]">
+              <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-ink-muted" />
+              <input
+                type="text"
+                placeholder="Search board..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full rounded-stamp border border-border bg-paper pl-7 pr-2 py-1 text-[11px] text-ink outline-none focus:border-accent"
+              />
+            </div>
+          </div>
+
+          {/* Cards listing */}
+          <div className="space-y-3">
+            {isLoading && trips.length === 0 ? (
+              <p className="text-center text-xs text-ink-muted py-8 animate-pulse">Loading live board...</p>
+            ) : filteredTrips.length === 0 ? (
+              <p className="text-center text-xs text-ink-muted py-12 border border-dashed border-border rounded-stamp bg-paper/30">
+                No active or dispatched trips on the board.
+              </p>
+            ) : (
+              filteredTrips.map((t) => (
+                <div key={t.id} className="p-4 border border-border rounded-stamp bg-paper/50 hover:bg-paper transition-shadow hover:shadow-sm space-y-3">
+                  {/* Card Header row */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-mono text-xs font-bold text-ink">TR-{t.id.toString().padStart(3, '0')}</span>
+                      <span className="text-[10px] text-ink-muted ml-2 bg-border/60 px-1.5 py-0.5 rounded-stamp">
+                        {t.vehicle?.registration_number || 'Unassigned'} / {t.driver?.name || 'Unassigned'}
+                      </span>
+                    </div>
+                    {/* Action buttons inside card */}
+                    <div className="flex items-center gap-1.5">
                       {t.status === 'Draft' && (
                         <button
                           type="button"
                           onClick={() => handleDispatch(t.id)}
-                          className="inline-flex items-center gap-1 rounded-stamp bg-accent-2 px-2.5 py-1 text-[10px] font-medium text-white transition-opacity hover:opacity-95"
+                          className="bg-[#3B82F6] hover:bg-[#2563EB] text-white px-2 py-1 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors"
                         >
-                          <Play size={10} /> Dispatch
+                          <Play size={8} /> Dispatch
                         </button>
                       )}
                       {t.status === 'Dispatched' && (
-                        <div className="flex items-center justify-end gap-1.5">
+                        <>
                           <button
                             type="button"
                             onClick={() => {
                               setCompleteError('')
-                              setFinalOdometer(t.vehicle?.odometer?.toString() || '')
+                              setFinalOdometer(t.vehicle?.odometer?.toString() || '0')
                               setCompletingTrip(t)
                             }}
-                            className="inline-flex items-center gap-1 rounded-stamp bg-accent px-2 py-1 text-[10px] font-medium text-white transition-opacity hover:opacity-95"
+                            className="bg-[#10B981] hover:bg-[#0D9488] text-white px-2 py-1 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors"
                           >
-                            <CheckCircle size={10} /> Complete
+                            Complete
                           </button>
                           <button
                             type="button"
                             onClick={() => handleCancel(t.id)}
-                            className="inline-flex items-center gap-1 rounded-stamp border border-danger px-2 py-1 text-[10px] font-medium text-danger transition-colors hover:bg-danger hover:text-white"
+                            className="border border-danger text-danger bg-danger/5 hover:bg-danger hover:text-white px-2 py-1 rounded text-[10px] font-semibold transition-colors"
                           >
-                            <XCircle size={10} /> Cancel
+                            Cancel
                           </button>
-                        </div>
+                        </>
                       )}
                       {(t.status === 'Completed' || t.status === 'Cancelled') && (
-                        <span className="text-[10px] text-ink-muted font-mono uppercase">Archived</span>
+                        <span className="text-[9px] uppercase font-bold tracking-wider text-ink-muted border border-border bg-border/30 px-1.5 py-0.5 rounded">
+                          Archived
+                        </span>
                       )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+                    </div>
+                  </div>
 
-      {/* New Trip Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-stamp border border-border bg-surface p-6 shadow-lg">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <h2 className="font-display text-base font-semibold text-ink">New Trip</h2>
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="text-ink-muted hover:text-ink"
-              >
-                <X size={18} />
-              </button>
-            </div>
+                  {/* Route information */}
+                  <div className="flex items-center gap-2 text-xs font-medium text-ink">
+                    <span>{t.source}</span>
+                    <ArrowRight size={12} className="text-ink-muted" />
+                    <span>{t.destination}</span>
+                  </div>
 
-            <form onSubmit={handleCreateTrip} className="mt-4 space-y-4">
-              {formError && (
-                <p className="stamp border-danger px-2 py-1 text-xs text-danger">{formError}</p>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="source" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                    Source
-                  </label>
-                  <input
-                    id="source"
-                    type="text"
-                    required
-                    placeholder="e.g. Warehouse A"
-                    value={source}
-                    onChange={(e) => setSource(e.target.value)}
-                    className="w-full rounded-stamp border border-border bg-paper px-3 py-1.5 text-xs text-ink outline-none focus:border-accent"
-                  />
+                  {/* Details and Badge Row */}
+                  <div className="flex items-center justify-between text-[11px] text-ink-muted border-t border-border/30 pt-2">
+                    <div className="flex items-center gap-4">
+                      <span>{t.planned_distance} km</span>
+                      <span>{t.cargo_weight} kg</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {t.status === 'Dispatched' ? (
+                        <span className="text-blue-500 font-semibold">45 min remaining</span>
+                      ) : t.status === 'Draft' ? (
+                        <span className="text-ink-muted italic">Awaiting driver</span>
+                      ) : t.status === 'Cancelled' ? (
+                        <span className="text-danger italic font-semibold">Vehicle went to shop</span>
+                      ) : (
+                        <span className="text-green-500 font-semibold">Completed</span>
+                      )}
+                      {renderStatusBadge(t.status)}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label htmlFor="dest" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                    Destination
-                  </label>
-                  <input
-                    id="dest"
-                    type="text"
-                    required
-                    placeholder="e.g. Client Site B"
-                    value={destination}
-                    onChange={(e) => setDestination(e.target.value)}
-                    className="w-full rounded-stamp border border-border bg-paper px-3 py-1.5 text-xs text-ink outline-none focus:border-accent"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="vehicle" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                  Assign Vehicle
-                </label>
-                <select
-                  id="vehicle"
-                  required
-                  value={selectedVehicleId}
-                  onChange={(e) => setSelectedVehicleId(e.target.value)}
-                  className="w-full rounded-stamp border border-border bg-paper px-2 py-1.5 text-xs text-ink outline-none focus:border-accent"
-                >
-                  <option value="">Select an available vehicle...</option>
-                  {availableVehicles.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.model} ({v.registration_number}) - Cap: {v.max_load_capacity} kg
-                    </option>
-                  ))}
-                </select>
-                {selectedVehicleObj && (
-                  <p className="mt-1 text-[10px] text-ink-muted">
-                    Vehicle capacity: <span className="font-semibold text-ink">{selectedVehicleObj.max_load_capacity} kg</span>. Current odometer: {selectedVehicleObj.odometer} km.
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label htmlFor="driver" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                  Assign Driver
-                </label>
-                <select
-                  id="driver"
-                  required
-                  value={selectedDriverId}
-                  onChange={(e) => setSelectedDriverId(e.target.value)}
-                  className="w-full rounded-stamp border border-border bg-paper px-2 py-1.5 text-xs text-ink outline-none focus:border-accent"
-                >
-                  <option value="">Select an available driver...</option>
-                  {availableDrivers.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name} (Safety: {d.safety_score})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="cargo" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                    Cargo Weight (kg)
-                  </label>
-                  <input
-                    id="cargo"
-                    type="number"
-                    required
-                    min="1"
-                    placeholder="e.g. 800"
-                    value={cargoWeight}
-                    onChange={(e) => setCargoWeight(e.target.value)}
-                    className="w-full rounded-stamp border border-border bg-paper px-3 py-1.5 text-xs text-ink outline-none focus:border-accent font-mono"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="dist" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                    Planned Distance (km)
-                  </label>
-                  <input
-                    id="dist"
-                    type="number"
-                    required
-                    min="1"
-                    placeholder="e.g. 150"
-                    value={plannedDistance}
-                    onChange={(e) => setPlannedDistance(e.target.value)}
-                    className="w-full rounded-stamp border border-border bg-paper px-3 py-1.5 text-xs text-ink outline-none focus:border-accent font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 border-t border-border pt-3 mt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="rounded-stamp border border-border bg-paper px-3 py-2 text-xs font-medium text-ink hover:bg-border transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="rounded-stamp bg-accent px-4 py-2 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
-                >
-                  {isSubmitting ? 'Creating...' : 'Create Trip'}
-                </button>
-              </div>
-            </form>
+              ))
+            )}
           </div>
         </div>
-      )}
 
-      {/* Complete Trip Modal */}
+        {/* Footer Note */}
+        <div className="text-[10px] text-ink-muted border-t border-border/40 pt-4 mt-6">
+          <strong>On Complete:</strong> odometer → fuel log → expenses → Vehicle & Driver Available
+        </div>
+      </div>
+
+      {/* Complete Trip Odometer Modal */}
       {completingTrip && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-stamp border border-border bg-surface p-6 shadow-lg">
             <div className="flex items-center justify-between border-b border-border pb-3">
-              <h2 className="font-display text-base font-semibold text-ink font-semibold">Complete Trip</h2>
+              <h2 className="font-display text-base font-semibold text-ink">Complete Trip</h2>
               <button
                 type="button"
                 onClick={() => setCompletingTrip(null)}
                 className="text-ink-muted hover:text-ink"
               >
-                <X size={18} />
+                <XCircle size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleCompleteSubmit} className="mt-4 space-y-4">
+            <form onSubmit={handleCompleteTripSubmit} className="mt-4 space-y-4">
               {completeError && (
                 <p className="stamp border-danger px-2 py-1 text-xs text-danger">{completeError}</p>
               )}
 
               <div>
-                <p className="text-xs text-ink-muted mb-3">
-                  You are completing the trip from <span className="font-medium text-ink">{completingTrip.source}</span> to <span className="font-medium text-ink">{completingTrip.destination}</span>.
-                </p>
-                <p className="text-xs text-ink-muted mb-3">
-                  Vehicle: <span className="font-medium text-ink">{completingTrip.vehicle?.model}</span> ({completingTrip.vehicle?.registration_number}).
+                <p className="text-xs text-ink-muted mb-2">
+                  Trip: <strong className="text-ink">{completingTrip.source} → {completingTrip.destination}</strong>
                 </p>
                 <p className="text-xs text-ink-muted mb-4">
-                  Odometer before trip: <span className="font-semibold text-ink">{completingTrip.vehicle?.odometer} km</span>.
+                  Starting Odometer: <strong className="text-ink font-mono">{completingTrip.vehicle?.odometer || 0} km</strong>
                 </p>
+              </div>
 
+              <div>
                 <label htmlFor="finalOdo" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                  Final Odometer Reading (km)
+                  Final Odometer reading (KM)
                 </label>
                 <input
                   id="finalOdo"
@@ -473,6 +550,7 @@ export default function TripsPage() {
                   value={finalOdometer}
                   onChange={(e) => setFinalOdometer(e.target.value)}
                   className="w-full rounded-stamp border border-border bg-paper px-3 py-1.5 text-xs text-ink outline-none focus:border-accent font-mono"
+                  placeholder="e.g. 12050"
                 />
               </div>
 
@@ -480,16 +558,16 @@ export default function TripsPage() {
                 <button
                   type="button"
                   onClick={() => setCompletingTrip(null)}
-                  className="rounded-stamp border border-border bg-paper px-3 py-2 text-xs font-medium text-ink hover:bg-border transition-colors"
+                  className="rounded-stamp border border-border bg-paper px-3 py-2 text-xs font-medium text-ink hover:bg-border"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isCompletingSubmit}
-                  className="rounded-stamp bg-accent px-4 py-2 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
+                  className="rounded-stamp bg-accent px-4 py-2 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50 font-semibold"
                 >
-                  {isCompletingSubmit ? 'Submitting...' : 'Complete Trip'}
+                  {isCompletingSubmit ? 'Saving...' : 'Submit & Complete'}
                 </button>
               </div>
             </form>
