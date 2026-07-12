@@ -42,8 +42,18 @@ def create_driver(
 def list_drivers(
     status_filter: Optional[str] = None,
     db: Session = Depends(get_db),
-    _user: User = require_auth
+    current_user: User = Depends(get_current_user)
 ):
+    if current_user.role == "driver":
+        driver = db.query(Driver).filter(Driver.email == current_user.email).all()
+        data = [DriverResponse.model_validate(d) for d in driver]
+        return ApiResponse(
+            success=True,
+            status_code=200,
+            message="Driver profile retrieved successfully",
+            data=data
+        )
+
     query = db.query(Driver)
     if status_filter:
         query = query.filter(Driver.status == status_filter)
@@ -61,8 +71,22 @@ def list_drivers(
 def get_driver(
     driver_id: int,
     db: Session = Depends(get_db),
-    _user: User = require_auth
+    current_user: User = Depends(get_current_user)
 ):
+    if current_user.role == "driver":
+        driver = db.query(Driver).filter(Driver.email == current_user.email, Driver.id == driver_id).first()
+        if not driver:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to view other driver profiles."
+            )
+        return ApiResponse(
+            success=True,
+            status_code=200,
+            message="Driver retrieved successfully",
+            data=DriverResponse.model_validate(driver)
+        )
+
     driver = db.query(Driver).filter(Driver.id == driver_id).first()
     if not driver:
         raise HTTPException(

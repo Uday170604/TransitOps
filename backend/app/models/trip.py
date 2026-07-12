@@ -13,6 +13,7 @@ class Trip(Base):
     cargo_weight = Column(Float, nullable=False)
     planned_distance = Column(Float, nullable=False)
     status = Column(String, nullable=False, default="Draft")
+    revenue = Column(Float, nullable=False, default=0.0)
     
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
