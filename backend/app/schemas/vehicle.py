@@ -9,6 +9,7 @@ class VehicleBase(BaseModel):
     odometer: float = Field(default=0.0, ge=0)
     acquisition_cost: float = Field(..., ge=0)
     status: Literal["Available", "On Trip", "In Shop", "Retired"] = "Available"
+    region: Optional[str] = None
 
 class VehicleCreate(VehicleBase):
     pass
@@ -21,6 +22,7 @@ class VehicleUpdate(BaseModel):
     odometer: Optional[float] = Field(None, ge=0)
     acquisition_cost: Optional[float] = Field(None, ge=0)
     status: Optional[Literal["Available", "On Trip", "In Shop", "Retired"]] = None
+    region: Optional[str] = None
 
 class VehicleResponse(VehicleBase):
     id: int

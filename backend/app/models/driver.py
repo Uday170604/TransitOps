@@ -12,3 +12,4 @@ class Driver(Base):
     contact_number = Column(String, nullable=False)
     safety_score = Column(Float, nullable=False, default=100.0)
     status = Column(String, nullable=False, default="Available")
+    email = Column(String, unique=True, index=True, nullable=True)

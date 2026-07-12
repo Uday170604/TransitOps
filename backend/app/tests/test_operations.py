@@ -157,21 +157,9 @@ def test_trip_validations_and_lifecycle(fleet_headers, driver_headers, safety_he
 
     # Setup valid driver
     expiry_valid = (date.today() + timedelta(days=100)).isoformat()
-    d_resp1 = client.post(
-        "/api/v1/drivers/",
-        headers=safety_headers,
-        json={
-            "name": "Valid Driver",
-            "license_number": lic_val,
-            "license_category": "Class B",
-            "license_expiry_date": expiry_valid,
-            "contact_number": "+15550201",
-            "safety_score": 98.0,
-            "status": "Available"
-        }
-    )
-    assert d_resp1.status_code == 201, d_resp1.json()
-    driver_id_valid = d_resp1.json()["data"]["id"]
+    d_resp1 = client.get("/api/v1/drivers/", headers=driver_headers)
+    assert d_resp1.status_code == 200, d_resp1.json()
+    driver_id_valid = d_resp1.json()["data"][0]["id"]
 
     # Setup expired driver
     expiry_expired = (date.today() - timedelta(days=10)).isoformat()

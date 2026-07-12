@@ -12,3 +12,4 @@ class Vehicle(Base):
     odometer = Column(Float, nullable=False, default=0.0)
     acquisition_cost = Column(Float, nullable=False)
     status = Column(String, nullable=False, default="Available")
+    region = Column(String, nullable=True)

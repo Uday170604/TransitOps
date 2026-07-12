@@ -75,9 +75,21 @@ def create_trip(
 def list_trips(
     status_filter: Optional[str] = None,
     db: Session = Depends(get_db),
-    _user: User = require_auth
+    current_user: User = Depends(get_current_user)
 ):
     query = db.query(Trip)
+    
+    if current_user.role == "driver":
+        driver_profile = db.query(Driver).filter(Driver.email == current_user.email).first()
+        if not driver_profile:
+            return ApiResponse(
+                success=True,
+                status_code=200,
+                message="Trips retrieved successfully",
+                data=[]
+            )
+        query = query.filter(Trip.driver_id == driver_profile.id)
+        
     if status_filter:
         query = query.filter(Trip.status == status_filter)
         
@@ -94,12 +106,20 @@ def list_trips(
 def get_trip(
     trip_id: int,
     db: Session = Depends(get_db),
-    _user: User = require_auth
+    current_user: User = Depends(get_current_user)
 ):
     trip = db.query(Trip).filter(Trip.id == trip_id).first()
     if not trip:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found.")
         
+    if current_user.role == "driver":
+        driver_profile = db.query(Driver).filter(Driver.email == current_user.email).first()
+        if not driver_profile or trip.driver_id != driver_profile.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to access other driver's trips."
+            )
+            
     return ApiResponse(
         success=True,
         status_code=200,
@@ -112,11 +132,25 @@ def update_trip_status(
     trip_id: int,
     data: TripStatusUpdate,
     db: Session = Depends(get_db),
-    _user: User = require_driver_or_manager
+    current_user: User = Depends(get_current_user)
 ):
+    if current_user.role not in ["driver", "fleet_manager"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to perform this action."
+        )
+        
     trip = db.query(Trip).filter(Trip.id == trip_id).first()
     if not trip:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found.")
+        
+    if current_user.role == "driver":
+        driver_profile = db.query(Driver).filter(Driver.email == current_user.email).first()
+        if not driver_profile or trip.driver_id != driver_profile.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to modify other driver's trips."
+            )
         
     if trip.status in ["Completed", "Cancelled"]:
         raise HTTPException(

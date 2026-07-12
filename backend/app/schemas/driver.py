@@ -10,6 +10,7 @@ class DriverBase(BaseModel):
     contact_number: str
     safety_score: float = Field(default=100.0, ge=0, le=100)
     status: Literal["Available", "On Trip", "Off Duty", "Suspended"] = "Available"
+    email: Optional[str] = None
 
 class DriverCreate(DriverBase):
     pass
@@ -22,6 +23,7 @@ class DriverUpdate(BaseModel):
     contact_number: Optional[str] = None
     safety_score: Optional[float] = Field(None, ge=0, le=100)
     status: Optional[Literal["Available", "On Trip", "Off Duty", "Suspended"]] = None
+    email: Optional[str] = None
 
 class DriverResponse(DriverBase):
     id: int

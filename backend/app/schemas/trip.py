@@ -12,6 +12,7 @@ class TripBase(BaseModel):
     cargo_weight: float = Field(..., gt=0)
     planned_distance: float = Field(..., gt=0)
     status: Literal["Draft", "Dispatched", "Completed", "Cancelled"] = "Draft"
+    revenue: float = Field(default=0.0, ge=0)
 
 class TripCreate(TripBase):
     pass
