@@ -1,37 +1,18 @@
 import { useState, useEffect } from 'react'
 import { Download, AlertCircle } from 'lucide-react'
-import { getVehicles, getTrips, getMaintenanceLogs } from '../lib/api.js'
+import { getReports } from '../lib/api.js'
 
 export default function ReportsPage() {
-  const [vehicles, setVehicles] = useState([])
-  const [trips, setTrips] = useState([])
-  const [logs, setLogs] = useState([])
-  const [expenses, setExpenses] = useState([])
+  const [reportData, setReportData] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    // Load local expenses
-    const saved = localStorage.getItem('transitops_expenses')
-    if (saved) {
-      try {
-        setExpenses(JSON.parse(saved))
-      } catch (e) {
-        console.error(e)
-      }
-    }
-
     async function loadData() {
       try {
         setIsLoading(true)
-        const [vehiclesData, tripsData, logsData] = await Promise.all([
-          getVehicles(),
-          getTrips(),
-          getMaintenanceLogs(),
-        ])
-        setVehicles(vehiclesData || [])
-        setTrips(tripsData || [])
-        setLogs(logsData || [])
+        const data = await getReports()
+        setReportData(data)
       } catch (err) {
         setError(err.message || 'Failed to load report data.')
       } finally {
@@ -41,103 +22,28 @@ export default function ReportsPage() {
     loadData()
   }, [])
 
-  // Helper to parse liters from fuel expense details (e.g. "35L", "40 liters", "45")
-  function parseLiters(detail) {
-    if (!detail) return 0
-    const match = detail.match(/\d+(\.\d+)?/)
-    return match ? parseFloat(match[0]) : 0
-  }
-
-  // Calculate global metrics
-  const completedTrips = trips.filter((t) => t.status === 'Completed')
-  const totalDistance = completedTrips.reduce((sum, t) => sum + (t.planned_distance || 0), 0)
-
-  const fuelExpenses = expenses.filter((e) => e.type === 'Fuel')
-  const totalFuelLiters = fuelExpenses.reduce((sum, e) => sum + parseLiters(e.detail), 0)
-
-  const fuelCost = expenses.filter((e) => e.type === 'Fuel').reduce((sum, e) => sum + e.cost, 0)
-  const otherCost = expenses.filter((e) => e.type !== 'Fuel').reduce((sum, e) => sum + e.cost, 0)
-  const maintenanceCost = logs.filter((l) => l.status === 'Closed').reduce((sum, l) => sum + (l.cost || 0), 0)
-
-  const operationalCost = fuelCost + otherCost + maintenanceCost
-  const fuelEfficiency = totalFuelLiters > 0 ? (totalDistance / totalFuelLiters).toFixed(1) : 0
-
-  const activeVehicles = vehicles.filter((v) => v.status === 'On Trip').length
-  const operationalVehicles = vehicles.filter((v) => v.status !== 'Retired')
-  const utilization = operationalVehicles.length > 0 ? Math.round((activeVehicles / operationalVehicles.length) * 100) : 0
-
-  // Calculate per-vehicle ROI metrics
-  const vehicleMetrics = vehicles.map((vehicle) => {
-    const vTrips = completedTrips.filter((t) => t.vehicle_id === vehicle.id)
-    const vDistance = vTrips.reduce((sum, t) => sum + (t.planned_distance || 0), 0)
-    
-    // Revenue model: ₹30 per km for completed trips
-    const vRevenue = vDistance * 30
-
-    // Maintenance cost for this vehicle
-    const vMaintenance = logs
-      .filter((l) => l.vehicle_id === vehicle.id && l.status === 'Closed')
-      .reduce((sum, l) => sum + (l.cost || 0), 0)
-
-    // Fuel cost for this vehicle
-    const vFuel = expenses
-      .filter((e) => e.vehicle_id === vehicle.id && e.type === 'Fuel')
-      .reduce((sum, e) => sum + e.cost, 0)
-
-    const totalCosts = vMaintenance + vFuel
-    const netProfit = vRevenue - totalCosts
-    const acquisition = vehicle.acquisition_cost || 1 // avoid division by zero
-    const roi = (netProfit / acquisition) * 100
-
-    return {
-      id: vehicle.id,
-      reg: vehicle.registration_number,
-      model: vehicle.model,
-      type: vehicle.type,
-      tripsCount: vTrips.length,
-      distance: vDistance,
-      revenue: vRevenue,
-      maintenance: vMaintenance,
-      fuel: vFuel,
-      costs: totalCosts,
-      roi: roi,
-      acquisition: vehicle.acquisition_cost
+  // Export CSV using authenticating fetch call
+  async function handleExportCSV() {
+    try {
+      const token = localStorage.getItem('transitops_token')
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/api/v1/reports/export`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'ngrok-skip-browser-warning': 'true'
+        }
+      })
+      if (!response.ok) throw new Error('Failed to export CSV')
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.setAttribute('href', url)
+      link.setAttribute('download', 'fleet_operational_report.csv')
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch (err) {
+      alert(err.message || 'Failed to download report.')
     }
-  })
-
-  // Calculate Average ROI
-  const operationalVehicleMetrics = vehicleMetrics.filter((vm) => {
-    const vObj = vehicles.find((v) => v.id === vm.id)
-    return vObj && vObj.status !== 'Retired'
-  })
-  
-  const avgROI = operationalVehicleMetrics.length > 0
-    ? (operationalVehicleMetrics.reduce((sum, vm) => sum + vm.roi, 0) / operationalVehicleMetrics.length).toFixed(1)
-    : 0
-
-  const METRICS = [
-    { label: 'Fuel Efficiency', value: `${fuelEfficiency} km/L`, hint: 'Distance ÷ Fuel' },
-    { label: 'Fleet Utilization', value: `${utilization}%`, hint: 'Vehicles on trip vs. total' },
-    { label: 'Operational Cost', value: `₹${operationalCost.toLocaleString()}`, hint: 'Fuel + Maintenance + Toll' },
-    { label: 'Avg. Vehicle ROI', value: `${avgROI}%`, hint: '(Revenue − Costs) ÷ Acquisition' },
-  ]
-
-  // Export CSV
-  function handleExportCSV() {
-    let csvContent = 'Registration No,Model,Type,Trips Completed,Total Distance (km),Acquisition Cost (INR),Maintenance Cost (INR),Fuel Cost (INR),Est. Revenue (INR),ROI (%)\n'
-    
-    vehicleMetrics.forEach((vm) => {
-      csvContent += `"${vm.reg}","${vm.model}","${vm.type}",${vm.tripsCount},${vm.distance},${vm.acquisition},${vm.maintenance},${vm.fuel},${vm.revenue},${vm.roi.toFixed(1)}\n`
-    })
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.setAttribute('href', url)
-    link.setAttribute('download', `transitops_fleet_report_${new Date().toISOString().split('T')[0]}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
   }
 
   if (isLoading) {
@@ -155,6 +61,26 @@ export default function ReportsPage() {
       </div>
     )
   }
+
+  const vehicles = reportData?.vehicles || []
+  const validEfficiencies = vehicles.map(v => v.fuel_efficiency).filter(fe => fe > 0)
+  const avgFuelEfficiency = validEfficiencies.length > 0
+    ? (validEfficiencies.reduce((sum, fe) => sum + fe, 0) / validEfficiencies.length).toFixed(1)
+    : '0.0'
+
+  const fleetUtilization = reportData?.fleet_utilization_pct ?? 0
+  const totalCost = reportData?.total_operational_cost ?? 0
+  
+  const avgROI = vehicles.length > 0
+    ? ((vehicles.reduce((sum, v) => sum + v.roi, 0) / vehicles.length) * 100).toFixed(1)
+    : '0.0'
+
+  const METRICS = [
+    { label: 'Avg. Fuel Efficiency', value: `${avgFuelEfficiency} km/L`, hint: 'Sum of efficiency ÷ vehicles' },
+    { label: 'Fleet Utilization', value: `${fleetUtilization}%`, hint: 'Vehicles on trip vs. total' },
+    { label: 'Operational Cost', value: `₹${totalCost.toLocaleString()}`, hint: 'Fuel + Maintenance + Toll' },
+    { label: 'Avg. Vehicle ROI', value: `${avgROI}%`, hint: '(Revenue − Costs) ÷ Acquisition' },
+  ]
 
   return (
     <div className="space-y-6">
@@ -189,37 +115,31 @@ export default function ReportsPage() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-border text-[10px] uppercase tracking-wide text-ink-muted">
+                <th className="px-4 py-3 font-medium">Vehicle ID</th>
                 <th className="px-4 py-3 font-medium">Reg No</th>
                 <th className="px-4 py-3 font-medium">Model</th>
-                <th className="px-4 py-3 font-medium text-center">Trips</th>
-                <th className="px-4 py-3 font-medium text-center">Distance</th>
-                <th className="px-4 py-3 font-medium text-right">Maintenance</th>
-                <th className="px-4 py-3 font-medium text-right">Fuel Logged</th>
-                <th className="px-4 py-3 font-medium text-right">Est. Revenue</th>
-                <th className="px-4 py-3 font-medium text-right">Acquisition</th>
+                <th className="px-4 py-3 font-medium text-right">Fuel Efficiency</th>
+                <th className="px-4 py-3 font-medium text-right">Total Operational Cost</th>
                 <th className="px-4 py-3 font-medium text-right">ROI %</th>
               </tr>
             </thead>
             <tbody>
-              {vehicleMetrics.length === 0 ? (
+              {vehicles.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="px-4 py-6 text-center text-ink-muted">
+                  <td colSpan="6" className="px-4 py-6 text-center text-ink-muted">
                     No vehicles available to calculate metrics.
                   </td>
                 </tr>
               ) : (
-                vehicleMetrics.map((vm) => (
-                  <tr key={vm.id} className="border-b border-border last:border-0 hover:bg-paper/40">
-                    <td className="px-4 py-2.5 font-mono text-ink font-semibold">{vm.reg}</td>
-                    <td className="px-4 py-2.5 text-ink-muted">{vm.model}</td>
-                    <td className="px-4 py-2.5 text-center font-mono text-ink-muted">{vm.tripsCount}</td>
-                    <td className="px-4 py-2.5 text-center font-mono text-ink-muted">{vm.distance} km</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-ink-muted">₹{vm.maintenance.toLocaleString()}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-ink-muted">₹{vm.fuel.toLocaleString()}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-ink-muted font-medium text-accent-2">₹{vm.revenue.toLocaleString()}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-ink-muted">₹{vm.acquisition.toLocaleString()}</td>
-                    <td className={`px-4 py-2.5 text-right font-mono font-semibold ${vm.roi >= 0 ? 'text-accent-2' : 'text-danger'}`}>
-                      {vm.roi.toFixed(1)}%
+                vehicles.map((v) => (
+                  <tr key={v.vehicle_id} className="border-b border-border last:border-0 hover:bg-paper/40">
+                    <td className="px-4 py-2.5 font-mono text-ink font-semibold">VEH-{v.vehicle_id}</td>
+                    <td className="px-4 py-2.5 font-mono text-ink font-semibold">{v.registration_number}</td>
+                    <td className="px-4 py-2.5 text-ink-muted">{v.model}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-ink-muted">{v.fuel_efficiency} km/L</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-ink-muted">₹{v.total_operational_cost.toLocaleString()}</td>
+                    <td className={`px-4 py-2.5 text-right font-mono font-semibold ${(v.roi * 100) >= 0 ? 'text-accent-2' : 'text-danger'}`}>
+                      {(v.roi * 100).toFixed(2)}%
                     </td>
                   </tr>
                 ))
@@ -232,7 +152,7 @@ export default function ReportsPage() {
       <div className="flex gap-2 rounded-stamp border border-dashed border-border bg-paper/30 p-4 text-xs text-ink-muted">
         <AlertCircle size={14} className="shrink-0 text-ink-muted mt-0.5" />
         <p>
-          ROI is calculated based on an operational revenue yield model of <strong>₹30 per km</strong> for completed trips, offset by vehicle acquisition cost and operational expenses (Maintenance + Fuel).
+          ROI is calculated based on an operational revenue yield model of completed trips distance, offset by vehicle acquisition cost and operational expenses (Maintenance + Fuel + Expenses) from the database.
         </p>
       </div>
     </div>

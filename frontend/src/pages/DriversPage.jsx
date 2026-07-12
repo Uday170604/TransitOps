@@ -21,6 +21,7 @@ export default function DriversPage() {
   const [contactNumber, setContactNumber] = useState('')
   const [safetyScore, setSafetyScore] = useState('100')
   const [status, setStatus] = useState('Available')
+  const [email, setEmail] = useState('')
 
   async function loadDrivers() {
     try {
@@ -72,6 +73,7 @@ export default function DriversPage() {
         contact_number: contactNumber.trim(),
         safety_score: scoreVal,
         status,
+        email: email.trim() || null,
       })
       // Reset form
       setName('')
@@ -81,6 +83,7 @@ export default function DriversPage() {
       setContactNumber('')
       setSafetyScore('100')
       setStatus('Available')
+      setEmail('')
       setIsModalOpen(false)
       loadDrivers()
     } catch (err) {
@@ -142,7 +145,12 @@ export default function DriversPage() {
                   const expired = isLicenseExpired(d.license_expiry_date)
                   return (
                     <tr key={d.id || d.license_number} className="border-b border-border last:border-0">
-                      <td className="px-4 py-3 text-ink font-medium">{d.name}</td>
+                      <td className="px-4 py-3 text-ink font-medium">
+                        <div>
+                          <p className="text-xs text-ink font-medium">{d.name}</p>
+                          {d.email && <p className="font-mono text-[10px] text-ink-muted">{d.email}</p>}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 font-mono text-xs text-ink-muted">{d.license_number}</td>
                       <td className="px-4 py-3 text-ink-muted">{d.license_category}</td>
                       <td className="px-4 py-3">
@@ -282,21 +290,36 @@ export default function DriversPage() {
                 </div>
               </div>
 
-              <div>
-                <label htmlFor="status" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
-                  Driver Status
-                </label>
-                <select
-                  id="status"
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
-                  className="w-full rounded-stamp border border-border bg-paper px-2 py-1.5 text-xs text-ink outline-none focus:border-accent"
-                >
-                  <option value="Available">Available</option>
-                  <option value="On Trip">On Trip</option>
-                  <option value="Off Duty">Off Duty</option>
-                  <option value="Suspended">Suspended</option>
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="status" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                    Driver Status
+                  </label>
+                  <select
+                    id="status"
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value)}
+                    className="w-full rounded-stamp border border-border bg-paper px-2 py-1.5 text-xs text-ink outline-none focus:border-accent"
+                  >
+                    <option value="Available">Available</option>
+                    <option value="On Trip">On Trip</option>
+                    <option value="Off Duty">Off Duty</option>
+                    <option value="Suspended">Suspended</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="email" className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                    Driver Email (Optional)
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    placeholder="driver@transitops.dev"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full rounded-stamp border border-border bg-paper px-3 py-1.5 text-xs text-ink outline-none focus:border-accent font-mono"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 border-t border-border pt-3 mt-4">

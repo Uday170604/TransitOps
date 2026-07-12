@@ -181,5 +181,48 @@ export async function closeMaintenanceLog(id, endDate, cost) {
   })
 }
 
+export async function getDashboard(filters = {}) {
+  const params = new URLSearchParams()
+  if (filters.vehicle_type) params.append('vehicle_type', filters.vehicle_type)
+  if (filters.status) params.append('status', filters.status)
+  if (filters.region) params.append('region', filters.region)
+  
+  const query = params.toString()
+  return request(`/api/v1/dashboard/${query ? `?${query}` : ''}`)
+}
+
+export async function getFuelLogs(vehicleId) {
+  const query = vehicleId ? `?vehicle_id=${vehicleId}` : ''
+  return request(`/api/v1/fuel${query}`)
+}
+
+export async function createFuelLog(data) {
+  return request('/api/v1/fuel', {
+    method: 'POST',
+    body: data,
+  })
+}
+
+export async function getExpenses(vehicleId, category) {
+  const params = new URLSearchParams()
+  if (vehicleId) params.append('vehicle_id', vehicleId)
+  if (category) params.append('category', category)
+  
+  const query = params.toString()
+  return request(`/api/v1/expenses${query ? `?${query}` : ''}`)
+}
+
+export async function createExpense(data) {
+  return request('/api/v1/expenses', {
+    method: 'POST',
+    body: data,
+  })
+}
+
+export async function getReports() {
+  return request('/api/v1/reports/')
+}
+
 export const api = { request }
+
 

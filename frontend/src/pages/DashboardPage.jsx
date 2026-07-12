@@ -1,24 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { ROLE_LABELS } from '../lib/roles.js'
-import { getVehicles, getDrivers, getTrips } from '../lib/api.js'
-
-function getVehicleRegion(regNum) {
-  if (!regNum) return 'Other'
-  const prefix = regNum.trim().substring(0, 2).toUpperCase()
-  if (prefix === 'GJ') return 'Gujarat'
-  if (prefix === 'MH') return 'Maharashtra'
-  if (prefix === 'DL') return 'Delhi'
-  if (prefix === 'KA') return 'Karnataka'
-  if (prefix === 'TN') return 'Tamil Nadu'
-  return 'Other'
-}
+import { getVehicles, getDashboard } from '../lib/api.js'
 
 export default function DashboardPage() {
   const { user } = useAuth()
   const [vehicles, setVehicles] = useState([])
-  const [drivers, setDrivers] = useState([])
-  const [trips, setTrips] = useState([])
+  const [kpis, setKpis] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -27,60 +15,52 @@ export default function DashboardPage() {
   const [selectedStatus, setSelectedStatus] = useState('All')
   const [selectedRegion, setSelectedRegion] = useState('All')
 
+  // Load static filter options on mount
   useEffect(() => {
-    async function loadData() {
+    async function loadInitial() {
+      try {
+        const vehiclesData = await getVehicles()
+        setVehicles(vehiclesData || [])
+      } catch (err) {
+        console.error('Failed to load vehicles list for filters', err)
+      }
+    }
+    loadInitial()
+  }, [])
+
+  // Load KPI data whenever filters change
+  useEffect(() => {
+    async function loadKpis() {
       try {
         setIsLoading(true)
-        const [vehiclesData, driversData, tripsData] = await Promise.all([
-          getVehicles(),
-          getDrivers(),
-          getTrips(),
-        ])
-        setVehicles(vehiclesData || [])
-        setDrivers(driversData || [])
-        setTrips(tripsData || [])
+        const filters = {}
+        if (selectedType !== 'All') filters.vehicle_type = selectedType
+        if (selectedStatus !== 'All') filters.status = selectedStatus
+        if (selectedRegion !== 'All') filters.region = selectedRegion
+
+        const dashboardData = await getDashboard(filters)
+        setKpis(dashboardData)
       } catch (err) {
-        setError(err.message || 'Failed to load dashboard data.')
+        setError(err.message || 'Failed to load dashboard KPIs.')
       } finally {
         setIsLoading(false)
       }
     }
-    loadData()
-  }, [])
+    loadKpis()
+  }, [selectedType, selectedStatus, selectedRegion])
 
   // Dynamic filter options
   const vehicleTypes = ['All', ...new Set(vehicles.map((v) => v.type).filter(Boolean))]
   const statuses = ['All', 'Available', 'On Trip', 'In Shop', 'Retired']
-  const regions = ['All', ...new Set(vehicles.map((v) => getVehicleRegion(v.registration_number)).filter(Boolean))]
+  const regions = ['All', ...new Set(vehicles.map((v) => v.region).filter(Boolean))]
 
-  // Apply filters
-  const filteredVehicles = vehicles.filter((v) => {
-    const matchesType = selectedType === 'All' || v.type === selectedType
-    const matchesStatus = selectedStatus === 'All' || v.status === selectedStatus
-    const matchesRegion = selectedRegion === 'All' || getVehicleRegion(v.registration_number) === selectedRegion
-    return matchesType && matchesStatus && matchesRegion
-  })
-
-  // Filtered vehicle IDs for trip filtering
-  const filteredVehicleIds = new Set(filteredVehicles.map((v) => v.id))
-
-  // Apply filters to trips (trips associated with filtered vehicles)
-  const filteredTrips = trips.filter((t) => filteredVehicleIds.has(t.vehicle_id))
-
-  // Calculate KPIs
-  const activeVehicles = filteredVehicles.filter((v) => v.status === 'On Trip').length
-  const availableVehicles = filteredVehicles.filter((v) => v.status === 'Available').length
-  const maintenanceVehicles = filteredVehicles.filter((v) => v.status === 'In Shop').length
-  
-  const activeTrips = filteredTrips.filter((t) => t.status === 'Dispatched').length
-  const pendingTrips = filteredTrips.filter((t) => t.status === 'Draft').length
-
-  const driversOnDuty = drivers.filter(d => d.status === 'Available' || d.status === 'On Trip').length
-
-  const totalOperationalVehicles = activeVehicles + availableVehicles + maintenanceVehicles
-  const fleetUtilization = totalOperationalVehicles > 0 
-    ? Math.round((activeVehicles / totalOperationalVehicles) * 100) 
-    : 0
+  const activeVehicles = kpis?.active_vehicles ?? 0
+  const availableVehicles = kpis?.available_vehicles ?? 0
+  const maintenanceVehicles = kpis?.vehicles_in_maintenance ?? 0
+  const activeTrips = kpis?.active_trips ?? 0
+  const pendingTrips = kpis?.pending_trips ?? 0
+  const driversOnDuty = kpis?.drivers_on_duty ?? 0
+  const fleetUtilization = kpis?.fleet_utilization_pct ?? 0
 
   const KPIS = [
     { label: 'Active Vehicles', value: activeVehicles },
@@ -92,7 +72,7 @@ export default function DashboardPage() {
     { label: 'Fleet Utilization', value: `${fleetUtilization}%` },
   ]
 
-  if (isLoading) {
+  if (isLoading && !kpis) {
     return (
       <div className="flex h-64 items-center justify-center">
         <p className="text-sm text-ink-muted animate-pulse">Loading dashboard metrics...</p>
@@ -183,7 +163,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="rounded-stamp border border-dashed border-border p-6 text-center text-sm text-ink-muted">
-        Active status of fleet operations: <span className="font-semibold text-ink">{filteredVehicles.length}</span> vehicles matched.
+        Active status of fleet operations.
       </div>
     </div>
   )
