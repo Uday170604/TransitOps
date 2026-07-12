@@ -5,7 +5,9 @@ from app.core.deps import get_db, get_current_user
 from app.core.permissions import RoleChecker
 from app.models.vehicle import Vehicle
 from app.models.user import User
+from app.models.document import VehicleDocument
 from app.schemas.vehicle import VehicleCreate, VehicleUpdate, VehicleResponse
+from app.schemas.document import VehicleDocumentCreate, VehicleDocumentResponse
 from app.schemas.user import ApiResponse
 
 router = APIRouter()
@@ -137,5 +139,71 @@ def delete_vehicle(
         success=True,
         status_code=200,
         message="Vehicle deleted successfully",
+        data={}
+    )
+
+@router.get("/{vehicle_id}/documents", response_model=ApiResponse[List[VehicleDocumentResponse]])
+def list_vehicle_documents(
+    vehicle_id: int,
+    db: Session = Depends(get_db),
+    _user: User = require_auth
+):
+    vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
+    if not vehicle:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found.")
+        
+    docs = db.query(VehicleDocument).filter(VehicleDocument.vehicle_id == vehicle_id).all()
+    data = [VehicleDocumentResponse.model_validate(doc) for doc in docs]
+    return ApiResponse(
+        success=True,
+        status_code=200,
+        message="Documents retrieved successfully",
+        data=data
+    )
+
+@router.post("/{vehicle_id}/documents", response_model=ApiResponse[VehicleDocumentResponse], status_code=status.HTTP_201_CREATED)
+def upload_vehicle_document(
+    vehicle_id: int,
+    data: VehicleDocumentCreate,
+    db: Session = Depends(get_db),
+    _user: User = require_fleet_manager
+):
+    vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
+    if not vehicle:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found.")
+        
+    db_doc = VehicleDocument(
+        vehicle_id=vehicle_id,
+        name=data.name,
+        document_type=data.document_type,
+        upload_date=data.upload_date,
+        file_content=data.file_content
+    )
+    db.add(db_doc)
+    db.commit()
+    db.refresh(db_doc)
+    return ApiResponse(
+        success=True,
+        status_code=201,
+        message="Document uploaded successfully",
+        data=VehicleDocumentResponse.model_validate(db_doc)
+    )
+
+@router.delete("/documents/{document_id}", response_model=ApiResponse[dict])
+def delete_vehicle_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+    _user: User = require_fleet_manager
+):
+    doc = db.query(VehicleDocument).filter(VehicleDocument.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+        
+    db.delete(doc)
+    db.commit()
+    return ApiResponse(
+        success=True,
+        status_code=200,
+        message="Document deleted successfully",
         data={}
     )

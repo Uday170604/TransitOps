@@ -291,3 +291,90 @@ def test_fuel_expense_and_operational_reports(fleet_headers, driver_headers, saf
     content = csv_resp.content.decode("utf-8")
     assert "Fuel Efficiency" in content
     assert f"V-REP-{rand}" in content
+
+
+def test_new_completed_features(fleet_headers, driver_headers, safety_headers, analyst_headers):
+    # 1. Test PDF Export
+    pdf_resp = client.get("/api/v1/reports/export-pdf", headers=analyst_headers)
+    assert pdf_resp.status_code == 200
+    assert pdf_resp.headers["content-type"] == "application/pdf"
+    
+    # 2. Test Driver License Expiry reminders
+    scan_resp = client.post("/api/v1/drivers/send-expiry-reminders", headers=safety_headers)
+    assert scan_resp.status_code == 200
+    assert scan_resp.json()["success"] is True
+    
+    get_resp = client.get("/api/v1/drivers/expiry-reminders", headers=driver_headers)
+    assert get_resp.status_code == 200
+    assert get_resp.json()["success"] is True
+    
+    # 3. Test Vehicle Documents upload/list/delete
+    rand = uuid.uuid4().hex[:6]
+    v_resp = client.post(
+        "/api/v1/vehicles/",
+        headers=fleet_headers,
+        json={
+            "registration_number": f"V-DOC-{rand}",
+            "model": "Doc Truck",
+            "type": "Truck",
+            "max_load_capacity": 5000.0,
+            "odometer": 1000.0,
+            "acquisition_cost": 60000.0
+        }
+    )
+    assert v_resp.status_code == 201
+    vehicle_id = v_resp.json()["data"]["id"]
+    
+    doc_resp = client.post(
+        f"/api/v1/vehicles/{vehicle_id}/documents",
+        headers=fleet_headers,
+        json={
+            "name": "Insurance 2026",
+            "document_type": "Insurance",
+            "upload_date": date.today().isoformat(),
+            "file_content": "data:application/pdf;base64,mockcontent"
+        }
+    )
+    assert doc_resp.status_code == 201
+    doc_id = doc_resp.json()["data"]["id"]
+    
+    # List documents
+    list_docs = client.get(f"/api/v1/vehicles/{vehicle_id}/documents", headers=driver_headers)
+    assert list_docs.status_code == 200
+    assert len(list_docs.json()["data"]) >= 1
+    assert list_docs.json()["data"][0]["name"] == "Insurance 2026"
+    
+    # Delete document
+    del_doc = client.delete(f"/api/v1/vehicles/documents/{doc_id}", headers=fleet_headers)
+    assert del_doc.status_code == 200
+    
+    # 4. Test Fuel update/delete
+    f_resp = client.post(
+        "/api/v1/fuel",
+        headers=driver_headers,
+        json={
+            "vehicle_id": vehicle_id,
+            "liters": 50.0,
+            "cost": 75.0,
+            "date": date.today().isoformat(),
+            "description": "Original Fuel"
+        }
+    )
+    assert f_resp.status_code == 201
+    fuel_id = f_resp.json()["data"]["id"]
+    
+    f_upd = client.put(
+        f"/api/v1/fuel/{fuel_id}",
+        headers=driver_headers,
+        json={
+            "liters": 60.0,
+            "cost": 90.0,
+            "description": "Updated Fuel"
+        }
+    )
+    assert f_upd.status_code == 200
+    assert f_upd.json()["data"]["liters"] == 60.0
+    
+    f_del = client.delete(f"/api/v1/fuel/{fuel_id}", headers=driver_headers)
+    assert f_del.status_code == 200
+

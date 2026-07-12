@@ -1,3 +1,10 @@
+import hashlib
+_orig_md5 = hashlib.md5
+def _patched_md5(*args, **kwargs):
+    kwargs.pop('usedforsecurity', None)
+    return _orig_md5(*args, **kwargs)
+hashlib.md5 = _patched_md5
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -128,3 +135,102 @@ def export_reports_csv(
         media_type="text/csv",
         headers=headers
     )
+
+@router.get("/export-pdf")
+def export_reports_pdf(
+    db: Session = Depends(get_db),
+    _user: User = require_manager_or_analyst
+):
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib import colors
+    
+    vehicles = db.query(Vehicle).all()
+    
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+    story = []
+    
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle(
+        'DocTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor('#4F46E5'),
+        spaceAfter=15
+    )
+    
+    subtitle_style = ParagraphStyle(
+        'DocSubtitle',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=colors.HexColor('#475569'),
+        spaceAfter=25
+    )
+    
+    th_style = ParagraphStyle(
+        'TableHeader',
+        parent=styles['Normal'],
+        fontSize=9,
+        fontName='Helvetica-Bold',
+        textColor=colors.white
+    )
+    
+    td_style = ParagraphStyle(
+        'TableCell',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=colors.HexColor('#0F172A')
+    )
+    
+    story.append(Paragraph("TransitOps Operational Report", title_style))
+    story.append(Paragraph("Fleet-wide performance metrics computed from completed trips, fuel logs, and maintenance logs.", subtitle_style))
+    story.append(Spacer(1, 10))
+    
+    table_data = [[
+        Paragraph("Vehicle ID", th_style),
+        Paragraph("Reg Number", th_style),
+        Paragraph("Model", th_style),
+        Paragraph("Fuel Efficiency", th_style),
+        Paragraph("Total Oper. Cost", th_style),
+        Paragraph("ROI", th_style)
+    ]]
+    
+    for v in vehicles:
+        metrics = calculate_vehicle_metrics(db, v)
+        table_data.append([
+            Paragraph(f"VEH-{metrics.vehicle_id}", td_style),
+            Paragraph(metrics.registration_number, td_style),
+            Paragraph(metrics.model, td_style),
+            Paragraph(f"{metrics.fuel_efficiency} km/L", td_style),
+            Paragraph(f"INR {metrics.total_operational_cost:,.2f}", td_style),
+            Paragraph(f"{(metrics.roi * 100):.2f}%", td_style)
+        ])
+        
+    t = Table(table_data, colWidths=[65, 80, 110, 95, 110, 70])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#4F46E5')),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+        ('TOPPADDING', (0,0), (-1,-1), 8),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.HexColor('#F8FAFC'), colors.white]),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+    ]))
+    
+    story.append(t)
+    doc.build(story)
+    
+    buffer.seek(0)
+    
+    headers = {
+        'Content-Disposition': 'attachment; filename="fleet_operational_report.pdf"'
+    }
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers=headers
+    )
+

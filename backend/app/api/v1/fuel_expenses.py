@@ -6,8 +6,8 @@ from app.models.fuel_log import FuelLog
 from app.models.expense import Expense
 from app.models.vehicle import Vehicle
 from app.models.user import User
-from app.schemas.fuel_log import FuelLogCreate, FuelLogResponse
-from app.schemas.expense import ExpenseCreate, ExpenseResponse
+from app.schemas.fuel_log import FuelLogCreate, FuelLogResponse, FuelLogUpdate
+from app.schemas.expense import ExpenseCreate, ExpenseResponse, ExpenseUpdate
 from app.schemas.user import ApiResponse
 from typing import List, Optional
 
@@ -99,4 +99,90 @@ def list_expenses(
         status_code=200,
         message="Expenses retrieved successfully",
         data=data
+    )
+
+@router.put("/fuel/{log_id}", response_model=ApiResponse[FuelLogResponse])
+def update_fuel_log(
+    log_id: int,
+    data: FuelLogUpdate,
+    db: Session = Depends(get_db),
+    _user: User = require_manager_or_driver
+):
+    log = db.query(FuelLog).filter(FuelLog.id == log_id).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Fuel log not found.")
+    
+    update_dict = data.model_dump(exclude_unset=True)
+    for key, value in update_dict.items():
+        setattr(log, key, value)
+    
+    db.commit()
+    db.refresh(log)
+    return ApiResponse(
+        success=True,
+        status_code=200,
+        message="Fuel log updated successfully",
+        data=FuelLogResponse.model_validate(log)
+    )
+
+@router.delete("/fuel/{log_id}", response_model=ApiResponse[dict])
+def delete_fuel_log(
+    log_id: int,
+    db: Session = Depends(get_db),
+    _user: User = require_manager_or_driver
+):
+    log = db.query(FuelLog).filter(FuelLog.id == log_id).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Fuel log not found.")
+    
+    db.delete(log)
+    db.commit()
+    return ApiResponse(
+        success=True,
+        status_code=200,
+        message="Fuel log deleted successfully",
+        data={}
+    )
+
+@router.put("/expenses/{expense_id}", response_model=ApiResponse[ExpenseResponse])
+def update_expense(
+    expense_id: int,
+    data: ExpenseUpdate,
+    db: Session = Depends(get_db),
+    _user: User = require_manager_or_driver
+):
+    expense = db.query(Expense).filter(Expense.id == expense_id).first()
+    if not expense:
+        raise HTTPException(status_code=404, detail="Expense not found.")
+    
+    update_dict = data.model_dump(exclude_unset=True)
+    for key, value in update_dict.items():
+        setattr(expense, key, value)
+    
+    db.commit()
+    db.refresh(expense)
+    return ApiResponse(
+        success=True,
+        status_code=200,
+        message="Expense updated successfully",
+        data=ExpenseResponse.model_validate(expense)
+    )
+
+@router.delete("/expenses/{expense_id}", response_model=ApiResponse[dict])
+def delete_expense(
+    expense_id: int,
+    db: Session = Depends(get_db),
+    _user: User = require_manager_or_driver
+):
+    expense = db.query(Expense).filter(Expense.id == expense_id).first()
+    if not expense:
+        raise HTTPException(status_code=404, detail="Expense not found.")
+    
+    db.delete(expense)
+    db.commit()
+    return ApiResponse(
+        success=True,
+        status_code=200,
+        message="Expense deleted successfully",
+        data={}
     )

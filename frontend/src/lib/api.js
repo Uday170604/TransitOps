@@ -203,6 +203,19 @@ export async function createFuelLog(data) {
   })
 }
 
+export async function updateFuelLog(id, data) {
+  return request(`/api/v1/fuel/${id}`, {
+    method: 'PUT',
+    body: data,
+  })
+}
+
+export async function deleteFuelLog(id) {
+  return request(`/api/v1/fuel/${id}`, {
+    method: 'DELETE',
+  })
+}
+
 export async function getExpenses(vehicleId, category) {
   const params = new URLSearchParams()
   if (vehicleId) params.append('vehicle_id', vehicleId)
@@ -217,6 +230,46 @@ export async function createExpense(data) {
     method: 'POST',
     body: data,
   })
+}
+
+export async function updateExpense(id, data) {
+  return request(`/api/v1/expenses/${id}`, {
+    method: 'PUT',
+    body: data,
+  })
+}
+
+export async function deleteExpense(id) {
+  return request(`/api/v1/expenses/${id}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function getVehicleDocuments(vehicleId) {
+  return request(`/api/v1/vehicles/${vehicleId}/documents`)
+}
+
+export async function uploadVehicleDocument(vehicleId, data) {
+  return request(`/api/v1/vehicles/${vehicleId}/documents`, {
+    method: 'POST',
+    body: data,
+  })
+}
+
+export async function deleteVehicleDocument(documentId) {
+  return request(`/api/v1/vehicles/documents/${documentId}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function sendExpiryReminders() {
+  return request('/api/v1/drivers/send-expiry-reminders', {
+    method: 'POST',
+  })
+}
+
+export async function getExpiryReminders() {
+  return request('/api/v1/drivers/expiry-reminders')
 }
 
 export async function getReports() {

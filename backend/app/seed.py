@@ -6,6 +6,8 @@ from app.models.trip import Trip
 from app.models.maintenance import MaintenanceLog
 from app.models.fuel_log import FuelLog
 from app.models.expense import Expense
+from app.models.role import Role
+from app.models.document import VehicleDocument
 from app.core.security import get_password_hash
 from datetime import date, timedelta
 
@@ -22,6 +24,14 @@ def seed_db():
         if existing_users > 0:
             print("Database already has users. Seeding skipped.")
             return
+
+        print("Seeding roles...")
+        roles_map = {}
+        for role_name in ["fleet_manager", "driver", "safety_officer", "financial_analyst"]:
+            db_role = Role(name=role_name)
+            db.add(db_role)
+            db.flush()
+            roles_map[role_name] = db_role.id
 
         print("Seeding initial users...")
         
@@ -58,6 +68,7 @@ def seed_db():
                 email=user_data["email"],
                 name=user_data["name"],
                 role=user_data["role"],
+                role_id=roles_map[user_data["role"]],
                 hashed_password=hashed_pwd
             )
             db.add(db_user)

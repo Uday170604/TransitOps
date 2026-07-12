@@ -67,6 +67,80 @@ def list_drivers(
         data=data
     )
 
+@router.post("/send-expiry-reminders", response_model=ApiResponse[List[dict]])
+def send_expiry_reminders(
+    db: Session = Depends(get_db),
+    _user: User = require_manager_or_safety
+):
+    import json
+    import os
+    from datetime import date, timedelta
+    limit = date.today() + timedelta(days=30)
+    drivers = db.query(Driver).filter(Driver.license_expiry_date <= limit).all()
+    
+    reminders = []
+    for d in drivers:
+        reminders.append({
+            "driver_name": d.name,
+            "license_number": d.license_number,
+            "expiry_date": d.license_expiry_date.isoformat(),
+            "email": d.email or f"{d.name.lower().replace(' ', '')}@transitops.dev",
+            "subject": "URGENT: Driving License Expiration Warning",
+            "body": f"Dear {d.name},\n\nThis is a warning that your driving license ({d.license_number}) will expire on {d.license_expiry_date.isoformat()}.\nPlease renew it immediately to avoid suspension from trip dispatches.\n\nBest regards,\nTransitOps Safety Department"
+        })
+        
+    outbox_path = r"C:\Users\LENOVO\.gemini\antigravity-ide\brain\eb0ce586-907c-4f0a-937e-017d82818777\simulated_reminders.json"
+    existing = []
+    if os.path.exists(outbox_path):
+        try:
+            with open(outbox_path, "r") as f:
+                existing = json.load(f)
+        except Exception:
+            pass
+            
+    sent_keys = {f"{e['driver_name']}-{e['expiry_date']}" for e in existing}
+    new_sent = 0
+    for r in reminders:
+        key = f"{r['driver_name']}-{r['expiry_date']}"
+        if key not in sent_keys:
+            existing.append(r)
+            new_sent += 1
+            
+    try:
+        os.makedirs(os.path.dirname(outbox_path), exist_ok=True)
+        with open(outbox_path, "w") as f:
+            json.dump(existing, f, indent=2)
+    except Exception as ex:
+        print("Failed to write reminders to file:", ex)
+        
+    return ApiResponse(
+        success=True,
+        status_code=200,
+        message=f"Scan completed. Found {len(reminders)} warnings. {new_sent} new reminders sent to simulated outbox.",
+        data=reminders
+    )
+
+@router.get("/expiry-reminders", response_model=ApiResponse[List[dict]])
+def get_expiry_reminders(
+    _user: User = require_auth
+):
+    import json
+    import os
+    outbox_path = r"C:\Users\LENOVO\.gemini\antigravity-ide\brain\eb0ce586-907c-4f0a-937e-017d82818777\simulated_reminders.json"
+    existing = []
+    if os.path.exists(outbox_path):
+        try:
+            with open(outbox_path, "r") as f:
+                existing = json.load(f)
+        except Exception:
+            pass
+    return ApiResponse(
+        success=True,
+        status_code=200,
+        message="Simulated emails retrieved successfully",
+        data=existing
+    )
+
 @router.get("/{driver_id}", response_model=ApiResponse[DriverResponse])
 def get_driver(
     driver_id: int,
@@ -160,3 +234,6 @@ def delete_driver(
         message="Driver deleted successfully",
         data={}
     )
+
+
+
