@@ -21,86 +21,23 @@ TransitOps is a modern, responsive, and secure transport operations management p
 
 ---
 
-## 📐 Architecture & Workflow
-
-### 🏗️ System Architecture
+## Architecture
 
 ```mermaid
 flowchart LR
-    %% Styles
-    classDef client fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#fff;
-    classDef gateway fill:#8b5cf6,stroke:#6d28d9,stroke-width:2px,color:#fff;
-    classDef auth fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#fff;
-    classDef service fill:#10b981,stroke:#059669,stroke-width:2px,color:#fff;
-    classDef db fill:#06b6d4,stroke:#0891b2,stroke-width:2px,color:#fff;
-
-    subgraph ClientLayer["🖥️ Frontend Application"]
-        Users["👥 Operators & Drivers"]:::client
-        SPA["⚛️ React UI (Vite + Tailwind)"]:::client
-        Ctx["🔐 Auth & Settings Context"]:::client
-        Users -->|Browse / Actions| SPA
-        SPA -->|User Prefs & Token| Ctx
-    end
-
-    subgraph BackendLayer["⚡ FastAPI Backend Core"]
-        GW["🌐 Uvicorn API Gateway (:8000)"]:::gateway
-        Auth["🛡️ Jose JWT Auth & Dynamic RBAC"]:::auth
-        FleetSvc["🚚 Fleet & Trips Service"]:::service
-        OpsSvc["🔧 Maintenance & Fuel Logs"]:::service
-        Analytics["📊 Analytics & SVG Generator"]:::service
-        ORM["🗄️ SQLAlchemy ORM"]:::service
-
-        SPA -->|REST API + Bearer Token| GW
-        GW -->|Verify Permissions| Auth
-        GW -->|Dispatch / Tracking| FleetSvc
-        GW -->|Fuel & Repairs| OpsSvc
-        GW -->|Reports & Conversions| Analytics
-
-        FleetSvc --> ORM
-        OpsSvc --> ORM
-        Analytics --> ORM
-    end
-
-    subgraph StorageLayer["💾 Database"]
-        PG[("🐘 PostgreSQL (:5432)")]:::db
-        ORM -->|SQL Queries| PG
-    end
+  A[Fleet Manager / Driver] --> B[React + Vite UI]
+  B --> C[Auth Context & JWT]
+  B --> D[FastAPI Gateway]
+  C --> D
+  D --> E[Dynamic RBAC Guard]
+  E --> F[Fleet & Trip Dispatch]
+  E --> G[Maintenance & Fuel Logs]
+  E --> H[Reports & Analytics]
+  F --> I[SQLAlchemy ORM]
+  G --> I
+  H --> I
+  I --> J[(PostgreSQL Database)]
 ```
-
-### 🔄 Trip Dispatch & Safety Validation Workflow
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Dispatcher as 👨‍💼 Fleet Manager
-    participant UI as ⚛️ TransitOps UI
-    participant API as ⚡ FastAPI Backend
-    participant RBAC as 🛡️ RBAC & Safety Guard
-    participant DB as 🐘 PostgreSQL
-
-    Dispatcher->>UI: Create Trip Dispatch Request
-    UI->>API: POST /api/v1/trips (Vehicle ID, Driver ID)
-    API->>RBAC: Check Role Permissions & Token
-    RBAC-->>API: Authorized
-    API->>DB: Query Driver License & Vehicle Status
-    DB-->>API: Driver License & Vehicle Hold Info
-    
-    alt Safety Violation (Expired License or Vehicle Hold)
-        API-->>UI: ⚠️ 400 Warning: Safety Hold / License Expired
-        UI-->>Dispatcher: Display Warning & Block Dispatch
-    else Passed Safety Checks
-        API->>DB: Save Scheduled Trip
-        DB-->>API: Trip Confirmed
-        API-->>UI: 200 OK (Trip Scheduled)
-        UI-->>Dispatcher: Show Confirmation & Real-time Route
-    end
-```
-
-<p align="center">
-  <a href="https://Uday170604.github.io/TransitOps/architecture.html">
-    <b>✨ Open Live Interactive & Animated Diagram ✨</b>
-  </a>
-</p>
 
 ---
 
