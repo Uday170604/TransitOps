@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "7417e393-636d-471a-adbf-b2288c16c25f",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/home/uday/Downloads/TransitOps-main/.archify/candidate/candidate.json",
+  "output": "/home/uday/Downloads/TransitOps-main/docs/architecture.html",
+  "specification": {
+    "sha256": "bcb7d4fb33a1b865e2774365a9876a0187f8be3c51edb7b5e23ebf9450b4c048",
+    "bytes": 4008
+  },
+  "artifact": {
+    "sha256": "442fcfd13e4074ebf2437dcab1ce378bfb64b91966f11f73f3dc4b51c8d00104",
+    "bytes": 853047
+  }
+}

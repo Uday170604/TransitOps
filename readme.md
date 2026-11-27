@@ -21,6 +21,22 @@ TransitOps is a modern, responsive, and secure transport operations management p
 
 ---
 
+## 📐 Architecture
+
+<p align="center">
+  <a href="https://Uday170604.github.io/TransitOps/architecture.html">
+    <img src="docs/architecture.svg" alt="TransitOps Architecture Diagram" width="100%" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://Uday170604.github.io/TransitOps/architecture.html">
+    <b>✨ Open Live Interactive & Animated Diagram ✨</b>
+  </a>
+</p>
+
+---
+
 ## 🛠️ Installation & Setup
 
 ### Prerequisites
