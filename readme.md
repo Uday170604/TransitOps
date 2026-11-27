@@ -39,6 +39,12 @@ flowchart LR
   I --> J[(PostgreSQL Database)]
 ```
 
+<p align="center">
+  <a href="https://Uday170604.github.io/TransitOps/architecture.html">
+    <b>✨ Open Live Interactive & Animated Diagram ✨</b>
+  </a>
+</p>
+
 ---
 
 ## 🛠️ Installation & Setup
